@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}Stock Alerts{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-bell-fill"></i> Stock Alerts</h2>
+            <p class="text-muted">Monitor stock levels and critical alerts</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('stock.inventory') }}" class="btn btn-outline-primary">
+                <i class="bi bi-box2"></i> Back to Inventory
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-6">
+                    <select name="unread" class="form-select">
+                        <option value="true" {% if unread_only %}selected{% endif %}>Unread Alerts Only</option>
+                        <option value="false" {% if not unread_only %}selected{% endif %}>All Alerts</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-filter"></i> Filter
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Alerts Table -->
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Material</th>
+                        <th>Alert Type</th>
+                        <th>Current Stock</th>
+                        <th>Min / Max</th>
+                        <th>Created</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for alert in alerts.items %}
+                    <tr {% if not alert.is_read %}class="table-warning"{% endif %}>
+                        <td>
+                            <strong>{{ alert.material.name }}</strong>
+                            <br><small class="text-muted">{{ alert.material.code }}</small>
+                        </td>
+                        <td>
+                            {% if alert.alert_type == 'below_min' %}
+                            <span class="badge bg-danger"><i class="bi bi-exclamation-circle"></i> Below Minimum</span>
+                            {% elif alert.alert_type == 'at_min' %}
+                            <span class="badge bg-warning"><i class="bi bi-exclamation-triangle"></i> At Minimum</span>
+                            {% elif alert.alert_type == 'near_max' %}
+                            <span class="badge bg-info"><i class="bi bi-info-circle"></i> Near Maximum</span>
+                            {% else %}
+                            <span class="badge bg-secondary"><i class="bi bi-dash-circle"></i> At Maximum</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <strong>{{ alert.current_stock }} {{ alert.material.unit }}</strong>
+                        </td>
+                        <td>{{ alert.min_stock }} / {{ alert.max_stock }}</td>
+                        <td>{{ alert.created_at.strftime('%d-%m-%Y %H:%M') }}</td>
+                        <td>
+                            {% if alert.is_read %}
+                            <span class="badge bg-success">Read</span>
+                            {% else %}
+                            <span class="badge bg-warning">Unread</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if not alert.is_read %}
+                            <form method="POST" action="{{ url_for('stock.mark_alert_read', alert_id=alert.id) }}" style="display: inline;">
+                                <button type="submit" class="btn btn-sm btn-outline-success">
+                                    <i class="bi bi-check-circle"></i> Mark Read
+                                </button>
+                            </form>
+                            {% else %}
+                            <a href="{{ url_for('stock.material_detail', material_id=alert.material_id) }}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i> View Material
+                            </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">No alerts found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if alerts.pages > 1 %}
+    <nav aria-label="Page navigation" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if alerts.has_prev %}
+            <li class="page-item">
+                <a class="page-link" href="?page=1&unread={{ 'true' if unread_only else 'false' }}">First</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ alerts.prev_num }}&unread={{ 'true' if unread_only else 'false' }}">Previous</a>
+            </li>
+            {% endif %}
+
+            {% for page_num in alerts.iter_pages() %}
+                {% if page_num %}
+                    {% if page_num == alerts.page %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ page_num }}</span>
+                    </li>
+                    {% else %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_num }}&unread={{ 'true' if unread_only else 'false' }}">{{ page_num }}</a>
+                    </li>
+                    {% endif %}
+                {% endif %}
+            {% endfor %}
+
+            {% if alerts.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ alerts.next_num }}&unread={{ 'true' if unread_only else 'false' }}">Next</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ alerts.pages }}&unread={{ 'true' if unread_only else 'false' }}">Last</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

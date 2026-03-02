@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}Demand Detail{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-cart-check"></i> {{ demand.demand_number }}</h2>
+            <p class="text-muted">{{ demand.material.name }}</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('demands.list_demands') }}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between mb-2">
+                <strong>Workflow Progress</strong>
+                <span>{{ demand.progress_percentage }}%</span>
+            </div>
+            <div class="progress" style="height: 10px;">
+                <div class="progress-bar" role="progressbar" style="width: {{ demand.progress_percentage }}%" 
+                     aria-valuenow="{{ demand.progress_percentage }}" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <small class="text-muted">Status: {{ demand.demand_status | replace('_', ' ') | upper }}</small>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Demand Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="text-muted small">Material</label>
+                        <p><strong>{{ demand.material.name }}</strong> ({{ demand.material.code }})</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Quantity Requested</label>
+                        <p><strong>{{ demand.quantity_requested }} {{ demand.material.unit }}</strong></p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Available Stock</label>
+                        <p>{{ demand.material.current_stock }} {{ demand.material.unit }}</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Priority</label>
+                        <p>
+                            <span class="badge 
+                                {% if demand.priority == 'urgent' %}bg-danger
+                                {% elif demand.priority == 'high' %}bg-warning
+                                {% else %}bg-info{% endif %}">
+                                {{ demand.priority | upper }}
+                            </span>
+                        </p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Reason</label>
+                        <p>{{ demand.reason or '-' }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Requestor Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="text-muted small">Requested By</label>
+                        <p><strong>{{ demand.requestor.full_name }}</strong></p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Request Date</label>
+                        <p>{{ demand.created_at.strftime('%d-%m-%Y %H:%M') }}</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Status</label>
+                        <p>
+                            <span class="badge 
+                                {% if demand.demand_status == 'fulfilled' %}bg-success
+                                {% elif demand.demand_status == 'rejected' %}bg-danger
+                                {% elif demand.demand_status == 'approved_stock_agent' %}bg-info
+                                {% elif demand.demand_status == 'approved_supervisor' %}bg-secondary
+                                {% else %}bg-warning{% endif %}" style="font-size: 0.9rem;">
+                                {{ demand.demand_status | replace('_', ' ') | upper }}
+                            </span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Supervisor Review -->
+    {% if demand.supervisor_id or demand.demand_status in ['supervisor_review', 'approved_supervisor', 'rejected'] %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-person-badge"></i> Supervisor Review</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="text-muted small">Supervisor</label>
+                        <p><strong>{{ demand.supervisor_user.full_name if demand.supervisor_id else '-' }}</strong></p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Approval Status</label>
+                        <p>
+                            <span class="badge 
+                                {% if demand.supervisor_approval == 'approved' %}bg-success
+                                {% elif demand.supervisor_approval == 'rejected' %}bg-danger
+                                {% else %}bg-warning{% endif %}">
+                                {{ demand.supervisor_approval | upper }}
+                            </span>
+                        </p>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="text-muted small">Approval Date</label>
+                        <p>{{ demand.supervisor_approval_date.strftime('%d-%m-%Y %H:%M') if demand.supervisor_approval_date else '-' }}</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Notes</label>
+                        <p>{{ demand.supervisor_notes or '-' }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Supervisor Actions -->
+            {% if demand.demand_status in ['pending', 'supervisor_review'] and demand.supervisor_id == user.id and user.role in ['supervisor', 'admin'] %}
+            <div class="alert alert-info mb-3">
+                <i class="bi bi-info-circle"></i> As the assigned supervisor, please review this demand.
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <form method="POST" action="{{ url_for('demands.supervisor_approve', demand_id=demand.id) }}">
+                        <div class="mb-2">
+                            <label class="form-label small">Approval Notes (Optional)</label>
+                            <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Add any notes..."></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-success btn-sm w-100">
+                            <i class="bi bi-check-circle"></i> Approve Demand
+                        </button>
+                    </form>
+                </div>
+                <div class="col-md-6">
+                    <form method="POST" action="{{ url_for('demands.supervisor_reject', demand_id=demand.id) }}">
+                        <div class="mb-2">
+                            <label class="form-label small">Rejection Reason</label>
+                            <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Why are you rejecting this demand?" required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-danger btn-sm w-100">
+                            <i class="bi bi-x-circle"></i> Decline Demand
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% elif demand.demand_status in ['supervisor_review'] and user.role not in ['supervisor', 'admin', 'stock_agent'] %}
+            <div class="alert alert-warning">
+                <i class="bi bi-hourglass-split"></i> Demand is pending supervisor approval...
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Stock Agent Review -->
+    {% if demand.stock_agent_id or demand.demand_status in ['pending', 'approved_supervisor', 'stock_agent_review', 'approved_stock_agent'] %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-box2"></i> Stock Agent Review</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="text-muted small">Stock Agent</label>
+                        <p><strong>{{ demand.stock_agent_user.full_name if demand.stock_agent_id else '-' }}</strong></p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Quantity Allocated</label>
+                        <p><strong>{{ demand.quantity_allocated or '-' }} {{ demand.material.unit }}</strong></p>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="text-muted small">Approval Status</label>
+                        <p>
+                            <span class="badge 
+                                {% if demand.stock_agent_approval == 'approved' %}bg-success
+                                {% elif demand.stock_agent_approval == 'partial' %}bg-info
+                                {% elif demand.stock_agent_approval == 'rejected' %}bg-danger
+                                {% else %}bg-warning{% endif %}">
+                                {{ demand.stock_agent_approval | upper }}
+                            </span>
+                        </p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Approval Date</label>
+                        <p>{{ demand.stock_agent_approval_date.strftime('%d-%m-%Y %H:%M') if demand.stock_agent_approval_date else '-' }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stock Agent Actions -->
+            {% if demand.demand_status in ['pending', 'approved_supervisor', 'stock_agent_review'] and user.role in ['stock_agent', 'admin'] %}
+            <div class="alert alert-info mb-3">
+                <i class="bi bi-info-circle"></i> 
+                {% if demand.demand_status == 'pending' %}
+                    This demand has no supervisor assigned. Please approve or reject it.
+                {% else %}
+                    This demand has been approved by the supervisor. Please allocate stock or reject.
+                {% endif %}
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <form method="POST" action="{{ url_for('demands.stock_agent_approve', demand_id=demand.id) }}">
+                        <div class="mb-2">
+                            <label class="form-label small">Notes (Optional)</label>
+                            <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Add any allocation notes..."></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-success btn-sm w-100">
+                            <i class="bi bi-check-circle"></i> Approve & Allocate to Technician
+                        </button>
+                    </form>
+                </div>
+                <div class="col-md-6">
+                    <form method="POST" action="{{ url_for('demands.stock_agent_reject', demand_id=demand.id) }}">
+                        <div class="mb-2">
+                            <label class="form-label small">Rejection Reason</label>
+                            <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Why are you rejecting this demand?" required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-danger btn-sm w-100">
+                            <i class="bi bi-x-circle"></i> Decline Demand
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% elif demand.demand_status in ['pending', 'approved_supervisor', 'stock_agent_review'] and user.role not in ['stock_agent', 'admin'] %}
+            <div class="alert alert-warning">
+                <i class="bi bi-hourglass-split"></i> Demand is pending stock agent allocation...
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

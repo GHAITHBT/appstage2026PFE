@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}Comprehensive Maintenance Report{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2><i class="fas fa-clipboard-list"></i> Comprehensive Maintenance Report</h2>
+            <p class="text-muted">Machine: <strong>{{ schedule.machine.name }}</strong> | Schedule: <strong>{{ schedule.scheduled_date.strftime('%d-%m-%Y') }}</strong></p>
+        </div>
+    </div>
+
+    <form method="POST" id="reportForm">
+        <!-- Machine Information Section -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-cogs"></i> Machine Information</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <label class="form-label">Machine No. / Code</label>
+                        <input type="text" class="form-control" value="{{ schedule.machine.machine_code }}" readonly>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Machine Type</label>
+                        <input type="text" class="form-control" value="{{ schedule.machine.model }}" readonly>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Location</label>
+                        <input type="text" class="form-control" value="{{ schedule.machine.location }}" readonly>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Technician</label>
+                        <input type="text" class="form-control" value="{{ current_user.first_name }} {{ current_user.last_name }}" readonly>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-2">
+                        <label class="form-label">Date <span class="text-danger">*</span></label>
+                        <input type="date" name="report_date" class="form-control" value="{{ now.strftime('%Y-%m-%d') }}" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Start Time <span class="text-danger">*</span></label>
+                        <input type="time" name="actual_start_time" class="form-control" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">End Time <span class="text-danger">*</span></label>
+                        <input type="time" name="actual_end_time" class="form-control" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Maintenance Type</label>
+                        <select name="maintenance_type" class="form-select">
+                            <option value="preventive">Preventive</option>
+                            <option value="corrective">Corrective</option>
+                            <option value="predictive">Predictive</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Machine Condition (Before)</label>
+                        <select name="machine_condition" class="form-select">
+                            <option value="">Select...</option>
+                            <option value="excellent">Excellent</option>
+                            <option value="good">Good</option>
+                            <option value="fair">Fair</option>
+                            <option value="poor">Poor</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Maintenance Checklist Section -->
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-tasks"></i> Maintenance Checklist</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 40%;">Item / Component</th>
+                                <th style="width: 15%;">Test</th>
+                                <th style="width: 10%;">Status</th>
+                                <th style="width: 35%;">Notes / Findings</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Lubrication & Control -->
+                            <tr>
+                                <td colspan="4" class="table-info"><strong>1. Lubrication & Control</strong></td>
+                            </tr>
+                            <tr>
+                                <td>Bearing lubrication (25,000 + 5000 rpm)</td>
+                                <td><input type="checkbox" name="lubrication_check_1" class="form-check-input"></td>
+                                <td>
+                                    <select name="lubrication_status_1" class="form-select form-select-sm">
+                                        <option value="">Select</option>
+                                        <option value="pass">✓ Pass</option>
+                                        <option value="fail">✗ Fail</option>
+                                        <option value="na">N/A</option>
+                                    </select>
+                                </td>
+                                <td><textarea name="lubrication_notes_1" class="form-control form-control-sm" rows="1"></textarea></td>
+                            </tr>
+                            <tr>
+                                <td>Cooling/Ventilation Check (10000 + 25000)</td>
+                                <td><input type="checkbox" name="cooling_check_1" class="form-check-input"></td>
+                                <td>
+                                    <select name="cooling_status_1" class="form-select form-select-sm">
+                                        <option value="">Select</option>
+                                        <option value="pass">✓ Pass</option>
+                                        <option value="fail">✗ Fail</option>
+                                        <option value="na">N/A</option>
+                                    </select>
+                                </td>
+                                <td><textarea name="cooling_notes_1" class="form-control form-control-sm" rows="1"></textarea></td>
+                            </tr>
+                            <tr>
+                                <td>Bearing Check</td>
+                                <td><input type="checkbox" name="bearing_check_1" class="form-check-input"></td>
+                                <td>
+                                    <select name="bearing_status_1" class="form-select form-select-sm">
+                                        <option value="">Select</option>
+                                        <option value="pass">✓ Pass</option>
+                                        <option value="fail">✗ Fail</option>
+                                        <option value="na">N/A</option>
+                                    </select>
+                                </td>
+                                <td><textarea name="bearing_notes_1" class="form-control form-control-sm" rows="1"></textarea></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Components Replacement Section -->
+        <div class="card mb-4">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="fas fa-wrench"></i> Components Replacement / Adjustment</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Components Replaced/Maintained</label>
+                    <textarea name="components_replaced" class="form-control" rows="4" placeholder="List all components replaced, adjusted, or serviced..."></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Spare Parts Used</label>
+                    <textarea name="parts_used" class="form-control" rows="3" placeholder="List spare parts codes and quantities..."></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Findings & Actions Section -->
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-search"></i> Findings & Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Work Performed</label>
+                    <textarea name="work_description" class="form-control" rows="3" placeholder="Describe all work performed..." required></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Findings / Observations</label>
+                    <textarea name="findings" class="form-control" rows="3" placeholder="What did you observe..."></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Actions Taken</label>
+                    <textarea name="actions_taken" class="form-control" rows="3" placeholder="What corrective actions were taken..."></textarea>
+                </div>
+                <div class="form-check mb-3">
+                    <input type="checkbox" class="form-check-input" name="issues_found" id="issues_found">
+                    <label class="form-check-label" for="issues_found">
+                        Issues/Problems Found
+                    </label>
+                </div>
+                <div id="issue_div" style="display:none;">
+                    <label class="form-label">Issue Description</label>
+                    <textarea name="issue_description" class="form-control" rows="3" placeholder="Describe the issues found..."></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recommendations Section -->
+        <div class="card mb-4">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="fas fa-lightbulb"></i> Recommendations</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Machine Condition (After Maintenance)</label>
+                    <select name="machine_condition_after" class="form-select">
+                        <option value="">Select...</option>
+                        <option value="excellent">Excellent</option>
+                        <option value="good">Good</option>
+                        <option value="fair">Fair</option>
+                        <option value="poor">Poor</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Next Maintenance Recommended</label>
+                    <textarea name="next_maintenance_recommendation" class="form-control" rows="3" placeholder="When and what for next maintenance..."></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Safety Observations</label>
+                    <textarea name="safety_observations" class="form-control" rows="2" placeholder="Any safety concerns or observations..."></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Buttons -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <button type="submit" name="action" value="draft" class="btn btn-outline-primary">
+                    <i class="fas fa-save"></i> Save as Draft
+                </button>
+                <button type="submit" name="action" value="submit" class="btn btn-success">
+                    <i class="fas fa-check"></i> Submit & Request Approval
+                </button>
+                <a href="{{ url_for('maintenance.schedule_detail', schedule_id=schedule.id) }}" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+document.getElementById('issues_found').addEventListener('change', function() {
+    document.getElementById('issue_div').style.display = this.checked ? 'block' : 'none';
+});
+</script>
+{% endblock %}

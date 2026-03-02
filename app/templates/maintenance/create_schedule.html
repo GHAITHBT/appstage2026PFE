@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Create Maintenance Schedule{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-plus-circle"></i> Schedule Maintenance</h2>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('maintenance.schedules') }}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label class="form-label">Machine *</label>
+                            <select name="machine_id" class="form-select" required>
+                                <option value="">Select a machine...</option>
+                                {% for machine in machines %}
+                                <option value="{{ machine.id }}">{{ machine.name }} ({{ machine.machine_code }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Scheduled Date *</label>
+                                <input type="date" name="scheduled_date" class="form-control" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Schedule Type</label>
+                                <input type="text" name="schedule_type" class="form-control" placeholder="e.g., Preventive, Routine">
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Estimated Duration (hours)</label>
+                                <input type="number" name="estimated_duration_hours" class="form-control" value="2">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Frequency (days)</label>
+                                <input type="number" name="frequency_days" class="form-control" value="30">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Priority</label>
+                            <select name="priority" class="form-select">
+                                <option value="low">Low</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="high">High</option>
+                                <option value="critical">Critical</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea name="description" class="form-control" rows="4" placeholder="Describe the maintenance tasks..."></textarea>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle"></i> Schedule
+                            </button>
+                            <a href="{{ url_for('maintenance.schedules') }}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

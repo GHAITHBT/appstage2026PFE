@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}Maintenance Report Detail{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-file-text"></i> Maintenance Report #{{ report.id }}</h2>
+            <p class="text-muted">{{ report.schedule.machine.name }}</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <span class="badge 
+                {% if report.report_status == 'approved' %}bg-success
+                {% elif report.report_status == 'rejected' %}bg-danger
+                {% elif report.report_status == 'submitted' %}bg-info
+                {% else %}bg-warning{% endif %}" style="font-size: 1rem;">
+                {{ report.report_status | upper }}
+            </span>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Report Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="text-muted small">Technician</label>
+                        <p><strong>{{ report.technician.full_name }}</strong></p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Machine</label>
+                        <p><strong>{{ report.schedule.machine.name }}</strong></p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Start Time</label>
+                        <p>{{ report.actual_start_time.strftime('%d-%m-%Y %H:%M') if report.actual_start_time else '-' }}</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">End Time</label>
+                        <p>{{ report.actual_end_time.strftime('%d-%m-%Y %H:%M') if report.actual_end_time else '-' }}</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Duration</label>
+                        <p>{{ "%.2f"|format(report.actual_duration_hours) }} hours</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Status & Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="text-muted small">Report Status</label>
+                        <p>
+                            <span class="badge 
+                                {% if report.report_status == 'approved' %}bg-success
+                                {% elif report.report_status == 'rejected' %}bg-danger
+                                {% elif report.report_status == 'submitted' %}bg-info
+                                {% else %}bg-warning{% endif %}">
+                                {{ report.report_status | upper }}
+                            </span>
+                        </p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Issues Found</label>
+                        <p>
+                            {% if report.issues_found %}
+                            <span class="badge bg-danger">Yes</span>
+                            {% else %}
+                            <span class="badge bg-success">No</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    {% if report.report_status == 'draft' and (report.technician_id == user.id or user.role == 'admin') %}
+                    <form method="POST" action="{{ url_for('maintenance.submit_report', report_id=report.id) }}" style="display: inline;">
+                        <button type="submit" class="btn btn-primary btn-sm w-100 mb-2">
+                            <i class="bi bi-send"></i> Submit for Approval
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% if report.report_status == 'submitted' and user.role in ['supervisor', 'admin'] %}
+                    <form method="POST" action="{{ url_for('maintenance.approve_report', report_id=report.id) }}" style="display: inline;">
+                        <button type="submit" class="btn btn-success btn-sm w-100 mb-2">
+                            <i class="bi bi-check-circle"></i> Approve
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Work Details</h5>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <h6>Work Description</h6>
+                <p>{{ report.work_description or '-' }}</p>
+            </div>
+            <div class="mb-3">
+                <h6>Findings</h6>
+                <p>{{ report.findings or '-' }}</p>
+            </div>
+            <div class="mb-3">
+                <h6>Actions Taken</h6>
+                <p>{{ report.actions_taken or '-' }}</p>
+            </div>
+            {% if report.issue_description %}
+            <div class="mb-3">
+                <h6>Issue Description</h6>
+                <p>{{ report.issue_description }}</p>
+            </div>
+            {% endif %}
+            {% if report.components_replaced %}
+            <div class="mb-3">
+                <h6>Components Replaced</h6>
+                <p>{{ report.components_replaced }}</p>
+            </div>
+            {% endif %}
+            {% if report.next_maintenance_recommendation %}
+            <div class="mb-3">
+                <h6>Next Maintenance Recommendation</h6>
+                <p>{{ report.next_maintenance_recommendation }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if demands %}
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-cart-check"></i> Related Demands</h5>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Demand #</th>
+                        <th>Material</th>
+                        <th>Quantity</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for demand in demands %}
+                    <tr>
+                        <td><strong>{{ demand.demand_number }}</strong></td>
+                        <td>{{ demand.material.name }}</td>
+                        <td>{{ demand.quantity_requested }}</td>
+                        <td>
+                            <span class="badge bg-{% if demand.demand_status == 'fulfilled' %}success{% else %}warning{% endif %}">
+                                {{ demand.demand_status | replace('_', ' ') | upper }}
+                            </span>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('demands.detail', demand_id=demand.id) }}" class="btn btn-sm btn-outline-primary">View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

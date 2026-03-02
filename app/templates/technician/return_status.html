@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+
+{% block title %}Return Request Status{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1>Material Return Status</h1>
+    <p class="text-muted">Track your submitted material returns</p>
+    
+    <!-- Status Summary -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5>Pending Approval</h5>
+                    <h3 class="text-warning">{{ pending_count }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5>Approved</h5>
+                    <h3 class="text-success">{{ approved_count }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5>Rejected</h5>
+                    <h3 class="text-danger">{{ rejected_count }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5>Total Requests</h5>
+                    <h3>{{ total_count }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Filter Options -->
+    <div class="mb-4">
+        <form method="GET" class="form-inline">
+            <select name="status" class="form-control mr-2">
+                <option value="">All Statuses</option>
+                <option value="pending" {% if request.args.get('status') == 'pending' %}selected{% endif %}>Pending</option>
+                <option value="accepted" {% if request.args.get('status') == 'accepted' %}selected{% endif %}>Approved</option>
+                <option value="rejected" {% if request.args.get('status') == 'rejected' %}selected{% endif %}>Rejected</option>
+            </select>
+            <button type="submit" class="btn btn-primary">Filter</button>
+            <a href="/technician/return-status" class="btn btn-secondary ml-2">Clear</a>
+        </form>
+    </div>
+    
+    <!-- Return Requests Table -->
+    {% if returns %}
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>Request Date</th>
+                    <th>Material</th>
+                    <th>Quantity</th>
+                    <th>Reason</th>
+                    <th>Status</th>
+                    <th>Approved Date</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ret in returns %}
+                <tr>
+                    <td>{{ ret.created_at.strftime('%Y-%m-%d %H:%M') if ret.created_at else 'N/A' }}</td>
+                    <td>{{ ret.material_name or 'N/A' }}</td>
+                    <td>{{ ret.quantity }}</td>
+                    <td>
+                        <small>{{ ret.return_reason or 'N/A' }}</small>
+                    </td>
+                    <td>
+                        {% if ret.status == 'pending' %}
+                        <span class="badge bg-warning text-dark">Pending Approval</span>
+                        {% elif ret.status == 'accepted' %}
+                        <span class="badge bg-success">Approved ✓</span>
+                        {% elif ret.status == 'rejected' %}
+                        <span class="badge bg-danger">Rejected ✗</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ ret.approved_date.strftime('%Y-%m-%d %H:%M') if ret.approved_date else '-' }}</td>
+                    <td>
+                        <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#detailModal{{ loop.index }}" title="View details">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </td>
+                </tr>
+                
+                <!-- Detail Modal -->
+                <div class="modal fade" id="detailModal{{ loop.index }}" tabindex="-1" role="dialog" aria-labelledby="detailModalLabel{{ loop.index }}" aria-hidden="true">
+                    <div class="modal-dialog" role="document">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="detailModalLabel{{ loop.index }}">Return Request Details</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+                            <div class="modal-body">
+                                <p><strong>Material:</strong> {{ ret.material_name }}</p>
+                                <p><strong>Quantity:</strong> {{ ret.quantity }}</p>
+                                <p><strong>Condition:</strong> {{ ret.condition_of_material or 'N/A' }}</p>
+                                <p><strong>Reason:</strong> {{ ret.return_reason }}</p>
+                                <p><strong>Status:</strong> 
+                                    {% if ret.status == 'pending' %}
+                                    <span class="badge bg-warning text-dark">Pending</span>
+                                    {% elif ret.status == 'accepted' %}
+                                    <span class="badge bg-success">Approved</span>
+                                    {% elif ret.status == 'rejected' %}
+                                    <span class="badge bg-danger">Rejected</span>
+                                    {% endif %}
+                                </p>
+                                <p><strong>Request Date:</strong> {{ ret.created_at.strftime('%Y-%m-%d %H:%M') if ret.created_at else 'N/A' }}</p>
+                                {% if ret.approved_date %}
+                                <p><strong>Approved Date:</strong> {{ ret.approved_date.strftime('%Y-%m-%d %H:%M') }}</p>
+                                {% endif %}
+                                {% if ret.received_by_name %}
+                                <p><strong>Processed by:</strong> {{ ret.received_by_name }}</p>
+                                {% endif %}
+                                {% if ret.approved_notes %}
+                                <p><strong>Approval Notes:</strong></p>
+                                <p class="alert alert-light">{{ ret.approved_notes }}</p>
+                                {% endif %}
+                                {% if ret.notes %}
+                                <p><strong>Your Notes:</strong></p>
+                                <p class="alert alert-light">{{ ret.notes }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        No return requests found.
+    </div>
+    {% endif %}
+    
+    <div class="mt-4">
+        <a href="/technician/material-return" class="btn btn-primary">Submit New Return</a>
+        <a href="/technician" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+</div>
+{% endblock %}

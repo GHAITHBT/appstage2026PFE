@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}Edit User - {{ user.username }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-person-gear"></i> Edit User</h2>
+            <p class="text-muted">Modify user information and permissions</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('auth.list_users') }}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left"></i> Back to Users
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}" role="alert">
+                                {{ message }}
+                            </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <form method="POST">
+                        <!-- Username (Read-only) -->
+                        <div class="mb-3">
+                            <label class="form-label">Username <small class="text-muted">(Cannot be changed)</small></label>
+                            <input type="text" class="form-control" value="{{ user.username }}" disabled>
+                        </div>
+
+                        <!-- Personal Information -->
+                        <hr class="my-4">
+                        <h5 class="mb-3">Personal Information</h5>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">First Name *</label>
+                                <input type="text" class="form-control" name="first_name" value="{{ user.first_name }}" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Last Name *</label>
+                                <input type="text" class="form-control" name="last_name" value="{{ user.last_name }}" required>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Email *</label>
+                                <input type="email" class="form-control" name="email" value="{{ user.email }}" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Department</label>
+                                <input type="text" class="form-control" name="department" value="{{ user.department or '' }}">
+                            </div>
+                        </div>
+
+                        <!-- Role and Permissions -->
+                        <hr class="my-4">
+                        <h5 class="mb-3">Role & Permissions</h5>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Role *</label>
+                                <select class="form-select" name="role" required>
+                                    <option value="technician" {% if user.role == 'technician' %}selected{% endif %}>Technician</option>
+                                    <option value="supervisor" {% if user.role == 'supervisor' %}selected{% endif %}>Supervisor</option>
+                                    <option value="stock_agent" {% if user.role == 'stock_agent' %}selected{% endif %}>Stock Agent</option>
+                                    <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Work Zone (for Technicians)</label>
+                                <select class="form-select" name="zone">
+                                    <option value="">-- Select a zone --</option>
+                                    {% for zone in zones %}
+                                    <option value="{{ zone.name }}" {% if user.zone == zone.name %}selected{% endif %}>
+                                        {{ zone.name }} {% if zone.location %}({{ zone.location }}){% endif %}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Supervisor Assignment -->
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Supervisor (for Technicians)</label>
+                                <select class="form-select" name="supervisor_id">
+                                    <option value="">-- No Supervisor --</option>
+                                    {% for supervisor in supervisors %}
+                                    <option value="{{ supervisor.id }}" {% if user.supervisor_id == supervisor.id %}selected{% endif %}>
+                                        {{ supervisor.first_name }} {{ supervisor.last_name }} ({{ supervisor.role|title }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Account Status</label>
+                                <div class="form-check form-switch mt-2">
+                                    <input class="form-check-input" type="checkbox" name="is_active" id="isActive" {% if user.is_active %}checked{% endif %}>
+                                    <label class="form-check-label" for="isActive">
+                                        Active User
+                                    </label>
+                                </div>
+                                <small class="text-muted d-block mt-1">
+                                    {% if user.is_active %}
+                                        ✓ User can log in and access the system
+                                    {% else %}
+                                        ✗ User cannot log in
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Additional Info -->
+                        <hr class="my-4">
+                        <div class="row text-muted small">
+                            <div class="col-md-6">
+                                <p><strong>User ID:</strong> {{ user.user_id or 'N/A' }}</p>
+                                <p><strong>Created:</strong> {{ user.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Last Updated:</strong> {{ user.updated_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                            </div>
+                        </div>
+
+                        <!-- Buttons -->
+                        <div class="d-flex gap-2 mt-4">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle"></i> Save Changes
+                            </button>
+                            <a href="{{ url_for('auth.list_users') }}" class="btn btn-secondary">Cancel</a>
+                            <a href="{{ url_for('auth.reset_user_password', user_id=user.id) }}" class="btn btn-outline-warning ms-auto">
+                                <i class="bi bi-key"></i> Reset Password
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

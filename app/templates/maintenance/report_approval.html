@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}Maintenance Report Approval{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2><i class="fas fa-file-check"></i> Maintenance Report Review & Approval</h2>
+            <p class="text-muted">Report ID: <strong>#{{ report.id }}</strong> | Machine: <strong>{{ report.schedule.machine.name }}</strong></p>
+        </div>
+    </div>
+
+    <!-- Status Badge -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <span class="badge bg-{% if report.report_status == 'approved' %}success{% elif report.report_status == 'rejected' %}danger{% elif report.report_status == 'submitted' %}warning{% else %}secondary{% endif %} p-2" style="font-size: 1rem;">
+                Status: {{ report.report_status.upper() }}
+            </span>
+            {% if report.supervisor_approval_status %}
+            <span class="badge bg-{% if report.supervisor_approval_status == 'approved' %}success{% elif report.supervisor_approval_status == 'rejected' %}danger{% else %}info{% endif %} p-2" style="font-size: 1rem;">
+                Supervisor: {{ report.supervisor_approval_status.upper() }}
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    <form method="POST" id="approvalForm">
+        <!-- Machine Information Section -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-cogs"></i> Machine Information</h5>
+            </div>
+            <div class="card-body bg-light">
+                <div class="row">
+                    <div class="col-md-3">
+                        <strong>Machine:</strong><br>{{ report.schedule.machine.name }}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Code:</strong><br>{{ report.schedule.machine.machine_code }}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Type:</strong><br>{{ report.schedule.machine.model }}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Location:</strong><br>{{ report.schedule.machine.location }}
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="row">
+                    <div class="col-md-2">
+                        <strong>Technician:</strong><br>{{ report.technician.first_name }} {{ report.technician.last_name }}
+                    </div>
+                    <div class="col-md-2">
+                        <strong>Start Time:</strong><br>{{ report.actual_start_time.strftime('%H:%M') if report.actual_start_time else 'N/A' }}
+                    </div>
+                    <div class="col-md-2">
+                        <strong>End Time:</strong><br>{{ report.actual_end_time.strftime('%H:%M') if report.actual_end_time else 'N/A' }}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Machine Condition (Before):</strong><br>
+                        <span class="badge bg-light text-dark">{{ report.machine_condition | upper }}</span>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Machine Condition (After):</strong><br>
+                        <span class="badge bg-success">{{ report.machine_condition_after | upper }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Work Description -->
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-list-check"></i> Work Performed</h5>
+            </div>
+            <div class="card-body bg-light">
+                <p>{{ report.work_description or 'No description provided' }}</p>
+            </div>
+        </div>
+
+        <!-- Findings -->
+        <div class="card mb-4">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="fas fa-search"></i> Findings</h5>
+            </div>
+            <div class="card-body bg-light">
+                <p>{{ report.findings or 'No findings recorded' }}</p>
+                {% if report.issues_found %}
+                <div class="alert alert-danger" role="alert">
+                    <strong>Issues Found:</strong> {{ report.issue_description }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Actions Taken -->
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-tools"></i> Actions Taken</h5>
+            </div>
+            <div class="card-body bg-light">
+                <p>{{ report.actions_taken or 'No actions recorded' }}</p>
+            </div>
+        </div>
+
+        <!-- Components Replaced -->
+        {% if report.components_replaced %}
+        <div class="card mb-4">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="fas fa-wrench"></i> Components Replaced</h5>
+            </div>
+            <div class="card-body bg-light">
+                <p>{{ report.components_replaced }}</p>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Next Maintenance Recommendation -->
+        {% if report.next_maintenance_recommendation %}
+        <div class="card mb-4">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="fas fa-calendar-check"></i> Next Maintenance Recommendation</h5>
+            </div>
+            <div class="card-body bg-light">
+                <p>{{ report.next_maintenance_recommendation }}</p>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Supervisor Approval Section -->
+        {% if session.get('role') in ['admin', 'supervisor'] and report.report_status == 'submitted' %}
+        <div class="card mb-4 border-primary">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-check-circle"></i> Supervisor Review & Approval</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label"><strong>Decision</strong> <span class="text-danger">*</span></label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="supervisor_approval_status" id="approve" value="approved" required>
+                        <label class="form-check-label" for="approve">
+                            <strong>✓ Approve</strong> - Report is satisfactory
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="supervisor_approval_status" id="reject" value="rejected" required>
+                        <label class="form-check-label" for="reject">
+                            <strong>✗ Reject</strong> - Needs revision
+                        </label>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Supervisor Notes</label>
+                    <textarea name="supervisor_notes" class="form-control" rows="4" placeholder="Enter your review comments and feedback..."></textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Additional Observations</label>
+                    <textarea name="supervisor_observations" class="form-control" rows="3" placeholder="Any additional observations or recommendations..."></textarea>
+                </div>
+
+                <div class="alert alert-info">
+                    <small><strong>Note:</strong> Once approved, this report cannot be edited by the technician. If rejected, the technician will be notified to make corrections.</small>
+                </div>
+            </div>
+        </div>
+        {% elif report.supervisor_approval_status %}
+        <div class="card mb-4">
+            <div class="card-header {% if report.supervisor_approval_status == 'approved' %}bg-success{% else %}bg-danger{% endif %} text-white">
+                <h5 class="mb-0"><i class="fas fa-stamp"></i> Supervisor Decision</h5>
+            </div>
+            <div class="card-body bg-light">
+                <div class="row">
+                    <div class="col-md-3">
+                        <strong>Status:</strong><br>
+                        <span class="badge bg-{% if report.supervisor_approval_status == 'approved' %}success{% else %}danger{% endif %}">
+                            {{ report.supervisor_approval_status.upper() }}
+                        </span>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Supervised By:</strong><br>
+                        {{ report.supervisor.first_name if report.supervisor else 'N/A' }}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Date:</strong><br>
+                        {{ report.supervisor_approval_date.strftime('%d-%m-%Y %H:%M') if report.supervisor_approval_date else 'N/A' }}
+                    </div>
+                </div>
+                {% if report.supervisor_notes %}
+                <hr>
+                <strong>Supervisor Notes:</strong><br>
+                <p class="text-muted">{{ report.supervisor_notes }}</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Action Buttons -->
+        <div class="row mb-4">
+            <div class="col-12">
+                {% if session.get('role') in ['admin', 'supervisor'] and report.report_status == 'submitted' %}
+                    <button type="submit" name="action" value="approve" class="btn btn-success btn-lg">
+                        <i class="fas fa-thumbs-up"></i> Approve Report
+                    </button>
+                    <button type="submit" name="action" value="reject" class="btn btn-danger btn-lg">
+                        <i class="fas fa-thumbs-down"></i> Reject & Request Revision
+                    </button>
+                {% endif %}
+                <a href="{{ url_for('maintenance.schedule_detail', schedule_id=report.schedule_id) }}" class="btn btn-secondary btn-lg">
+                    <i class="fas fa-arrow-left"></i> Back
+                </a>
+                <a href="{{ url_for('maintenance.schedules') }}" class="btn btn-outline-secondary btn-lg">
+                    <i class="fas fa-list"></i> All Schedules
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

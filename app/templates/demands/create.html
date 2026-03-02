@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Create Spare Parts Demand{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-plus-circle"></i> New Spare Parts Demand</h2>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('demands.list_demands') }}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST" id="demandForm">
+                        <div class="mb-3">
+                            <label class="form-label">Maintenance Report (Optional)</label>
+                            <select name="maintenance_report_id" class="form-select">
+                                <option value="">Not linked to a report</option>
+                                {% for report in maintenance_reports %}
+                                <option value="{{ report.id }}">
+                                    Report #{{ report.id }} - {{ report.schedule.machine.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Priority</label>
+                            <select name="priority" class="form-select">
+                                <option value="low">Low</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="high">High</option>
+                                <option value="urgent">Urgent</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Reason for Demand</label>
+                            <textarea name="reason" class="form-control" rows="3" placeholder="Describe why these parts are needed..."></textarea>
+                        </div>
+
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5 class="mb-0">Materials</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="materials-container">
+                                    <div class="material-row mb-3">
+                                        <div class="row g-3">
+                                            <div class="col-md-8">
+                                                <select name="material_id" class="form-select" required>
+                                                    <option value="">Select material...</option>
+                                                    {% for material in materials %}
+                                                    <option value="{{ material.id }}" data-available="{{ material.current_stock }}">
+                                                        {{ material.name }} (Available: {{ material.current_stock }} {{ material.unit }})
+                                                    </option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <input type="number" name="quantity" placeholder="Qty" class="form-control" required value="1">
+                                            </div>
+                                            <div class="col-md-1">
+                                                <button type="button" class="btn btn-danger btn-sm remove-material" onclick="removeMaterial(this)">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="addMaterialRow()">
+                                    <i class="bi bi-plus-circle"></i> Add Another Material
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle"></i> Submit Demand
+                            </button>
+                            <a href="{{ url_for('demands.list_demands') }}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function addMaterialRow() {
+    const container = document.getElementById('materials-container');
+    const newRow = document.querySelector('.material-row').cloneNode(true);
+    newRow.querySelector('select').value = '';
+    newRow.querySelector('input').value = '1';
+    container.appendChild(newRow);
+}
+
+function removeMaterial(btn) {
+    const rows = document.querySelectorAll('.material-row');
+    if (rows.length > 1) {
+        btn.closest('.material-row').remove();
+    } else {
+        alert('You must have at least one material');
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}Return Material to Stock{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-arrow-counterclockwise"></i> Return Material to Stock</h2>
+            <p class="text-muted">Return unused materials from your demands</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('stock.inventory') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        {% if demands %}
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-list-check"></i> Your Fulfilled Demands</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" class="needs-validation" novalidate>
+                        <div class="mb-3">
+                            <label for="demandSelect" class="form-label">Select Demand <span class="text-danger">*</span></label>
+                            <select class="form-select" id="demandSelect" name="demand_id" required onchange="updateMaterialInfo()">
+                                <option value="">Choose a demand to return from...</option>
+                                {% for demand in demands %}
+                                <option value="{{ demand.id }}" data-material="{{ demand.material.name }}" data-allocated="{{ demand.quantity_allocated }}" data-returned="{{ demand.quantity_returned }}">
+                                    {{ demand.demand_number }} - {{ demand.material.code }} (Allocated: {{ demand.quantity_allocated }}, Returned: {{ demand.quantity_returned }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="form-text text-muted">Only fulfilled demands are shown</small>
+                        </div>
+
+                        <div class="mb-3" id="materialInfo" style="display: none;">
+                            <div class="alert alert-info">
+                                <strong>Material:</strong> <span id="materialName"></span><br>
+                                <strong>Available to Return:</strong> <span id="availableQty"></span>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="quantity" class="form-label">Quantity to Return <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="quantity" name="quantity" min="1" required>
+                            <small class="form-text text-muted">Quantity must not exceed allocated amount minus already returned</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="condition" class="form-label">Condition of Material <span class="text-danger">*</span></label>
+                            <select class="form-select" id="condition" name="condition" required>
+                                <option value="new">New (Unused)</option>
+                                <option value="used">Used (Good Condition)</option>
+                                <option value="damaged">Damaged (Not Suitable)</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="reason" class="form-label">Reason for Return <span class="text-danger">*</span></label>
+                            <textarea class="form-control" id="reason" name="reason" rows="3" placeholder="Why are you returning this material?" required></textarea>
+                            <small class="form-text text-muted">Examples: Ordered more than needed, Wrong material received, Job cancelled, etc.</small>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{{ url_for('stock.inventory') }}" class="btn btn-outline-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle"></i> Submit Return Request
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> Return Process</h5>
+                </div>
+                <div class="card-body">
+                    <div class="timeline">
+                        <div class="timeline-item">
+                            <div class="timeline-marker bg-primary">1</div>
+                            <div class="timeline-content">
+                                <h6>Submit Return</h6>
+                                <small class="text-muted">Fill the form and submit your return request</small>
+                            </div>
+                        </div>
+                        <div class="timeline-item">
+                            <div class="timeline-marker bg-info">2</div>
+                            <div class="timeline-content">
+                                <h6>Stock Agent Review</h6>
+                                <small class="text-muted">Stock agent will verify and accept/reject your return</small>
+                            </div>
+                        </div>
+                        <div class="timeline-item">
+                            <div class="timeline-marker bg-success">3</div>
+                            <div class="timeline-content">
+                                <h6>Stock Updated</h6>
+                                <small class="text-muted">Once accepted, material is added back to stock</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Important</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="mb-0 ps-3">
+                        <li>Materials must be in original condition</li>
+                        <li>Damaged materials may be rejected</li>
+                        <li>Provide clear reason for return</li>
+                        <li>Stock agent will verify before accepting</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-md-12">
+            <div class="alert alert-info" role="alert">
+                <i class="bi bi-info-circle"></i> <strong>No Returns Available</strong>
+                <p class="mb-0">You have no fulfilled demands with materials available for return. All your demands have been fully returned or none are eligible for return at this time.</p>
+            </div>
+            <a href="{{ url_for('stock.inventory') }}" class="btn btn-primary">
+                <i class="bi bi-arrow-left"></i> Back to Inventory
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+    .timeline {
+        position: relative;
+        padding-left: 30px;
+    }
+    
+    .timeline-item {
+        position: relative;
+        margin-bottom: 20px;
+        padding-bottom: 20px;
+    }
+    
+    .timeline-item:not(:last-child)::before {
+        content: '';
+        position: absolute;
+        left: -25px;
+        top: 40px;
+        width: 2px;
+        height: calc(100% - 20px);
+        background: #dee2e6;
+    }
+    
+    .timeline-marker {
+        position: absolute;
+        left: -35px;
+        top: 0;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+    }
+    
+    .timeline-content h6 {
+        margin-bottom: 5px;
+    }
+</style>
+
+<script>
+function updateMaterialInfo() {
+    const select = document.getElementById('demandSelect');
+    const option = select.options[select.selectedIndex];
+    
+    if (option.value) {
+        const material = option.dataset.material;
+        const allocated = parseInt(option.dataset.allocated);
+        const returned = parseInt(option.dataset.returned);
+        const available = allocated - returned;
+        
+        document.getElementById('materialName').textContent = material;
+        document.getElementById('availableQty').textContent = available + ' units';
+        document.getElementById('quantity').max = available;
+        document.getElementById('materialInfo').style.display = 'block';
+    } else {
+        document.getElementById('materialInfo').style.display = 'none';
+    }
+}
+
+// Form validation
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('.needs-validation');
+    if (form) {
+        form.addEventListener('submit', function(event) {
+            if (!form.checkValidity()) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            form.classList.add('was-validated');
+        }, false);
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Zones{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-map"></i> Manage Work Zones</h2>
+            <p class="text-muted">Create, edit, delete zones, and assign them to technicians</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('main.add_zone') }}" class="btn btn-success">
+                <i class="bi bi-plus-circle"></i> Add New Zone
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Zones List Column -->
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-list"></i> Available Zones ({{ zones.total }})</h5>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Zone Name</th>
+                                <th>Location</th>
+                                <th>Description</th>
+                                <th>Technicians</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if zones.items %}
+                                {% for zone in zones.items %}
+                                    {% set tech_count = technicians|selectattr('zone', 'equalto', zone.name)|length %}
+                                <tr>
+                                    <td><strong>{{ zone.name }}</strong></td>
+                                    <td>{{ zone.location or '-' }}</td>
+                                    <td><small>{{ zone.description[:40] or '-' }}{% if zone.description and zone.description|length > 40 %}...{% endif %}</small></td>
+                                    <td>
+                                        {% if tech_count > 0 %}
+                                        <span class="badge bg-info">{{ tech_count }}</span>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('main.edit_zone', zone_id=zone.id) }}" class="btn btn-sm btn-primary" title="Edit">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <form method="POST" action="{{ url_for('main.delete_zone', zone_id=zone.id) }}" class="d-inline" onsubmit="return confirm('Delete this zone? Technicians assigned to it will be unassigned.');">
+                                            <button type="submit" class="btn btn-sm btn-danger" title="Delete">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">
+                                    No zones created yet. <a href="{{ url_for('main.add_zone') }}">Create your first zone</a>
+                                </td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                {% if zones.pages > 1 %}
+                <nav class="card-footer" aria-label="Pagination">
+                    <ul class="pagination justify-content-center mb-0">
+                        {% if zones.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('main.manage_zones', page=1) }}">First</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('main.manage_zones', page=zones.prev_num) }}">Previous</a>
+                        </li>
+                        {% endif %}
+                        <li class="page-item active">
+                            <span class="page-link">Page {{ zones.page }} of {{ zones.pages }}</span>
+                        </li>
+                        {% if zones.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('main.manage_zones', page=zones.next_num) }}">Next</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('main.manage_zones', page=zones.pages) }}">Last</a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Assign Zones to Technicians Column -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-person-badge"></i> Assign Zones</h5>
+                </div>
+                <div class="card-body">
+                    {% if zones.items and technicians %}
+                    <div class="mb-3">
+                        <label for="tech-select" class="form-label">Select Technician</label>
+                        <select class="form-select" id="tech-select" onchange="updateZonesList()">
+                            <option value="">-- Choose technician --</option>
+                            {% for tech in technicians %}
+                            <option value="{{ tech.id }}" data-zone="{{ tech.zone or '' }}">
+                                {{ tech.first_name }} {{ tech.last_name }}
+                                {% if tech.zone %}<span class="badge bg-primary bg-sm">{{ tech.zone }}</span>{% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div id="zones-list">
+                        <label class="form-label">Available Zones</label>
+                        <div id="zone-options" class="d-flex flex-column gap-2">
+                            <p class="text-muted small text-center py-3">Select a technician to assign zones</p>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info mb-0">
+                        {% if not zones.items %}
+                        <i class="bi bi-info-circle"></i> No zones created yet. <a href="{{ url_for('main.add_zone') }}">Create a zone</a>
+                        {% elif not technicians %}
+                        <i class="bi bi-info-circle"></i> No technicians found.
+                        {% else %}
+                        <i class="bi bi-info-circle"></i> Unable to load data.
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-gear"></i> Quick Actions</h5>
+                </div>
+                <div class="card-body">
+                    <a href="{{ url_for('main.add_zone') }}" class="btn btn-sm btn-primary w-100 mb-2">
+                        <i class="bi bi-plus"></i> New Zone
+                    </a>
+                    <a href="{{ url_for('main.manage_zones') }}" class="btn btn-sm btn-secondary w-100">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function updateZonesList() {
+    const techSelect = document.getElementById('tech-select');
+    const zoneOptions = document.getElementById('zone-options');
+    const techId = techSelect.value;
+    
+    if (!techId) {
+        zoneOptions.innerHTML = '<p class="text-muted small text-center py-3">Select a technician to assign zones</p>';
+        return;
+    }
+    
+    const techOption = techSelect.options[techSelect.selectedIndex];
+    const currentZone = techOption.dataset.zone;
+    
+    let html = '';
+    const zones = {{ zones.items|safe|map(attribute='id')|list|tojson }};
+    const zoneNames = {{ zones.items|safe|map(attribute='name')|list|tojson }};
+    
+    for (let i = 0; i < zoneNames.length; i++) {
+        const zoneName = zoneNames[i];
+        const zoneId = zones[i];
+        const isAssigned = currentZone === zoneName;
+        html += `
+            <form method="POST" action="/zones/${zoneId}/assign/${techId}" class="d-block mb-2">
+                <button type="submit" class="btn btn-sm ${isAssigned ? 'btn-primary' : 'btn-outline-primary'} w-100 text-start">
+                    <i class="bi bi-${isAssigned ? 'check-circle-fill' : 'circle'}"></i> ${zoneName}
+                    ${isAssigned ? '<span class="badge bg-success float-end">Assigned</span>' : ''}
+                </button>
+            </form>
+        `;
+    }
+    zoneOptions.innerHTML = html || '<p class="text-muted small">No zones available</p>';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Analytics - Technician Performance{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-chart-bar"></i> Technician Performance Analytics</h2>
+                <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overall Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="text-primary text-uppercase small font-weight-bold">Total Reports</div>
+                    <div class="h3 mb-0 font-weight-bold">{{ total_reports }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="text-success text-uppercase small font-weight-bold">Total Technicians</div>
+                    <div class="h3 mb-0 font-weight-bold">{{ total_technicians }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="text-warning text-uppercase small font-weight-bold">Total Hours</div>
+                    <div class="h3 mb-0 font-weight-bold">{{ "%.1f"|format(total_hours) }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="text-info text-uppercase small font-weight-bold">Avg Duration/Report</div>
+                    <div class="h3 mb-0 font-weight-bold">{{ "%.1f"|format(avg_report_duration) }}h</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Performance Rankings -->
+    <div class="row mb-4">
+        <!-- Most Reports -->
+        <div class="col-lg-4">
+            <div class="card shadow mb-4">
+                <div class="card-header bg-success text-white">
+                    <h6 class="mb-0"><i class="fas fa-trophy"></i> Most Reports Completed</h6>
+                </div>
+                <div class="card-body">
+                    {% if most_reports %}
+                    <div class="list-group list-group-flush">
+                        {% for tech in most_reports %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">{{ tech.name }}</h6>
+                                <small class="text-muted">Zone: {{ tech.zone }}</small>
+                            </div>
+                            <span class="badge badge-success badge-lg">{{ tech.total_reports }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No data available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Most Time Spent -->
+        <div class="col-lg-4">
+            <div class="card shadow mb-4">
+                <div class="card-header bg-warning text-dark">
+                    <h6 class="mb-0"><i class="fas fa-hourglass-half"></i> Most Hours Worked</h6>
+                </div>
+                <div class="card-body">
+                    {% if most_time %}
+                    <div class="list-group list-group-flush">
+                        {% for tech in most_time %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">{{ tech.name }}</h6>
+                                <small class="text-muted">Zone: {{ tech.zone }}</small>
+                            </div>
+                            <span class="badge badge-warning badge-lg">{{ "%.1f"|format(tech.total_hours) }}h</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No data available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Fastest Technicians -->
+        <div class="col-lg-4">
+            <div class="card shadow mb-4">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0"><i class="fas fa-bolt"></i> Fastest (Avg Duration)</h6>
+                </div>
+                <div class="card-body">
+                    {% if fastest %}
+                    <div class="list-group list-group-flush">
+                        {% for tech in fastest %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">{{ tech.name }}</h6>
+                                <small class="text-muted">Zone: {{ tech.zone }} | {{ tech.total_reports }} reports</small>
+                            </div>
+                            <span class="badge badge-info badge-lg">{{ tech.avg_hours }}h</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No data available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Zone Performance -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h6 class="mb-0"><i class="fas fa-map-marker-alt"></i> Performance by Zone</h6>
+                </div>
+                <div class="card-body">
+                    {% if zones %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Zone</th>
+                                    <th>Technicians</th>
+                                    <th>Total Reports</th>
+                                    <th>Total Hours</th>
+                                    <th>Avg Duration/Report</th>
+                                    <th>Efficiency</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for zone in zones %}
+                                <tr>
+                                    <td><strong>{{ zone.name }}</strong></td>
+                                    <td>
+                                        <span class="badge bg-secondary">{{ zone.technicians }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-success">{{ zone.total_reports }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-warning">{{ "%.1f"|format(zone.total_hours) }}h</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">{{ zone.avg_hours }}h</span>
+                                    </td>
+                                    <td>
+                                        {% if zone.avg_hours <= 2 %}
+                                        <span class="badge bg-success"><i class="fas fa-check"></i> Excellent</span>
+                                        {% elif zone.avg_hours <= 4 %}
+                                        <span class="badge bg-info"><i class="fas fa-arrow-up"></i> Good</span>
+                                        {% elif zone.avg_hours <= 6 %}
+                                        <span class="badge bg-warning"><i class="fas fa-exclamation"></i> Fair</span>
+                                        {% else %}
+                                        <span class="badge bg-danger"><i class="fas fa-times"></i> Needs Improvement</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No zone data available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- All Technicians Detailed -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-dark text-white">
+                    <h6 class="mb-0"><i class="fas fa-users"></i> All Technicians Report</h6>
+                </div>
+                <div class="card-body">
+                    {% if technicians %}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Technician</th>
+                                    <th>Zone</th>
+                                    <th>Total Reports</th>
+                                    <th>Total Hours</th>
+                                    <th>Avg Duration</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for tech in technicians | sort(attribute='total_reports', reverse=True) %}
+                                <tr>
+                                    <td><strong>{{ tech.name }}</strong></td>
+                                    <td>{{ tech.zone }}</td>
+                                    <td>
+                                        <span class="badge bg-success">{{ tech.total_reports }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-warning">{{ "%.1f"|format(tech.total_hours) }}h</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">{{ tech.avg_hours }}h</span>
+                                    </td>
+                                    <td>
+                                        {% if tech.total_reports == 0 %}
+                                        <span class="badge bg-secondary">No Activity</span>
+                                        {% elif tech.avg_hours <= 2 %}
+                                        <span class="badge bg-success"><i class="fas fa-star"></i> Top Performer</span>
+                                        {% elif tech.avg_hours <= 4 %}
+                                        <span class="badge bg-info"><i class="fas fa-thumbs-up"></i> Good</span>
+                                        {% else %}
+                                        <span class="badge bg-warning"><i class="fas fa-exclamation-triangle"></i> Review Needed</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No technician data available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.border-left-primary {
+    border-left: 4px solid #007bff !important;
+}
+.border-left-success {
+    border-left: 4px solid #28a745 !important;
+}
+.border-left-warning {
+    border-left: 4px solid #ffc107 !important;
+}
+.border-left-info {
+    border-left: 4px solid #17a2b8 !important;
+}
+.badge-lg {
+    font-size: 1rem;
+    padding: 0.5rem 0.75rem;
+}
+</style>
+{% endblock %}

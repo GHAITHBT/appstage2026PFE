@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}Technicians List{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-people"></i> Technicians Directory</h2>
+            <p class="text-muted">View all technicians and their assigned zones</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('main.manage_zones') }}" class="btn btn-primary">
+                <i class="bi bi-geo-alt"></i> Manage Zones
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Filter by Zone</label>
+                    <select name="zone" class="form-select">
+                        <option value="">All Zones</option>
+                        {% for zone in zones %}
+                        <option value="{{ zone }}" {% if zone_filter == zone %}selected{% endif %}>{{ zone }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search"></i> Filter
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="row">
+        {% if technicians.items %}
+            {% for technician in technicians.items %}
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card h-100">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-start">
+                        <div>
+                            <h5 class="mb-0">{{ technician.full_name }}</h5>
+                            <small class="text-muted">@{{ technician.username }}</small>
+                        </div>
+                        {% if technician.is_active %}
+                        <span class="badge bg-success">Active</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Inactive</span>
+                        {% endif %}
+                    </div>
+                    <div class="card-body">
+                        <dl class="mb-0">
+                            <dt class="text-muted">Email</dt>
+                            <dd class="mb-3">
+                                <a href="mailto:{{ technician.email }}">{{ technician.email }}</a>
+                            </dd>
+                            
+                            <dt class="text-muted">Department</dt>
+                            <dd class="mb-3">
+                                {{ technician.department or 'Not assigned' }}
+                            </dd>
+                            
+                            <dt class="text-muted">Assigned Zone</dt>
+                            <dd class="mb-0">
+                                {% if technician.zone %}
+                                    <span class="badge bg-primary">
+                                        <i class="bi bi-geo-alt"></i> {{ technician.zone }}
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-warning">
+                                        <i class="bi bi-exclamation-triangle"></i> No Zone Assigned
+                                    </span>
+                                {% endif %}
+                            </dd>
+                        </dl>
+                    </div>
+                    <div class="card-footer bg-light">
+                        <a href="{{ url_for('main.manage_zones') }}" class="btn btn-sm btn-outline-primary w-100">
+                            <i class="bi bi-geo-alt"></i> Manage Zone
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+        <div class="col-md-12">
+            <div class="alert alert-info" role="alert">
+                <i class="bi bi-info-circle"></i> <strong>No Technicians Found</strong>
+                <p class="mb-0">
+                    {% if zone_filter %}
+                        No technicians are assigned to the "{{ zone_filter }}" zone.
+                    {% else %}
+                        No technicians are found in the system.
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Pagination -->
+    {% if technicians.pages > 1 %}
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if technicians.has_prev %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('main.list_technicians', page=technicians.prev_num, zone=zone_filter) }}">Previous</a>
+            </li>
+            {% endif %}
+            
+            {% for page_num in technicians.iter_pages() %}
+                {% if page_num %}
+                    {% if page_num == technicians.page %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ page_num }}</span>
+                    </li>
+                    {% else %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('main.list_technicians', page=page_num, zone=zone_filter) }}">{{ page_num }}</a>
+                    </li>
+                    {% endif %}
+                {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">...</span>
+                </li>
+                {% endif %}
+            {% endfor %}
+            
+            {% if technicians.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('main.list_technicians', page=technicians.next_num, zone=zone_filter) }}">Next</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

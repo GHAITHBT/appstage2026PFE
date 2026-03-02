@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block title %}Maintenance History{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1>Maintenance History</h1>
+    <p class="text-muted">Your maintenance reports and work logs</p>
+    
+    <!-- Filter Options -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <form method="GET" class="form-inline">
+                <select name="machine" class="form-control mr-2">
+                    <option value="">All Machines</option>
+                    {% for machine in machines %}
+                    <option value="{{ machine }}" {% if request.args.get('machine') == machine %}selected{% endif %}>{{ machine }}</option>
+                    {% endfor %}
+                </select>
+                <select name="report_type" class="form-control mr-2">
+                    <option value="">All Report Types</option>
+                    <option value="Standard" {% if request.args.get('report_type') == 'Standard' %}selected{% endif %}>Standard Report</option>
+                    <option value="Detailed" {% if request.args.get('report_type') == 'Detailed' %}selected{% endif %}>Detailed Report</option>
+                </select>
+                <button type="submit" class="btn btn-primary">Filter</button>
+                <a href="/technician/maintenance-history" class="btn btn-secondary ml-2">Clear</a>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Maintenance Reports -->
+    {% if reports %}
+    <div class="row">
+        {% for report in reports %}
+        <div class="col-md-12 mb-3">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h5 class="mb-0">{{ report.machine_name or 'Unnamed Machine' }}</h5>
+                            <small>{{ report.created_at.strftime('%Y-%m-%d %H:%M') if report.created_at else 'N/A' }}</small>
+                        </div>
+                        <div class="col-md-4 text-right">
+                            <span class="badge bg-light text-dark">{{ report.report_type or 'Standard' }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Basic Info -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <p><strong>Zone:</strong> {{ report.technician_zone or 'N/A' }}</p>
+                            <p><strong>Work Description:</strong></p>
+                            <p>{{ report.work_description or 'N/A' }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Status:</strong> <span class="badge bg-success">Completed</span></p>
+                            <p><strong>Report ID:</strong> #{{ report.id }}</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Detailed Fields (if Detailed Report) -->
+                    {% if report.report_type == 'Detailed' %}
+                    <hr>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Machine Condition Before:</strong></p>
+                            <p class="alert alert-light">{{ report.machine_condition or 'N/A' }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Machine Condition After:</strong></p>
+                            <p class="alert alert-light">{{ report.machine_condition_after or 'N/A' }}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Environmental Conditions:</strong></p>
+                            <p class="alert alert-light">{{ report.environmental_conditions or 'N/A' }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Safety Observations:</strong></p>
+                            <p class="alert alert-light">{{ report.safety_observations or 'N/A' }}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Tools Used:</strong></p>
+                            <p class="alert alert-light">{{ report.tools_used or 'N/A' }}</p>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="card-footer">
+                    <a href="#" class="btn btn-sm btn-info" data-toggle="modal" data-target="#reportModal{{ loop.index }}">View Full Details</a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Full Details Modal -->
+        <div class="modal fade" id="reportModal{{ loop.index }}" tabindex="-1" role="dialog" aria-labelledby="reportModalLabel{{ loop.index }}" aria-hidden="true">
+            <div class="modal-dialog modal-lg" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="reportModalLabel{{ loop.index }}">Maintenance Report - {{ report.machine_name or 'Unnamed' }}</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <p><strong>Report ID:</strong> #{{ report.id }}</p>
+                        <p><strong>Type:</strong> {{ report.report_type or 'Standard' }}</p>
+                        <p><strong>Date:</strong> {{ report.created_at.strftime('%Y-%m-%d %H:%M') if report.created_at else 'N/A' }}</p>
+                        <p><strong>Zone:</strong> {{ report.technician_zone or 'N/A' }}</p>
+                        <hr>
+                        <p><strong>Work Description:</strong></p>
+                        <p>{{ report.work_description or 'N/A' }}</p>
+                        
+                        {% if report.report_type == 'Detailed' %}
+                        <hr>
+                        <h6>Detailed Information</h6>
+                        <p><strong>Machine Condition Before:</strong></p>
+                        <p>{{ report.machine_condition or 'N/A' }}</p>
+                        
+                        <p><strong>Machine Condition After:</strong></p>
+                        <p>{{ report.machine_condition_after or 'N/A' }}</p>
+                        
+                        <p><strong>Environmental Conditions:</strong></p>
+                        <p>{{ report.environmental_conditions or 'N/A' }}</p>
+                        
+                        <p><strong>Safety Observations:</strong></p>
+                        <p>{{ report.safety_observations or 'N/A' }}</p>
+                        
+                        <p><strong>Tools Used:</strong></p>
+                        <p>{{ report.tools_used or 'N/A' }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        No maintenance reports found.
+    </div>
+    {% endif %}
+    
+    <div class="mt-4">
+        <a href="/maintenance/choose-report-type" class="btn btn-primary">Create New Report</a>
+        <a href="/technician" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+</div>
+{% endblock %}

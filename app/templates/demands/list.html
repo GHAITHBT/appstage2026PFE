@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Spare Parts Demands{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-cart-check"></i> Spare Parts Demands</h2>
+            {% if session.get('role') == 'supervisor' %}
+                <p class="text-muted">Demands assigned to you for approval</p>
+            {% elif session.get('role') == 'stock_agent' %}
+                <p class="text-muted">Demands pending stock allocation</p>
+            {% else %}
+                <p class="text-muted">Manage spare parts request workflow</p>
+            {% endif %}
+        </div>
+        <div class="col-md-4 text-end">
+            {% if session.get('role') in ['technician', 'supervisor', 'stock_agent'] %}
+            <a href="{{ url_for('demands.create_demand') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> New Demand
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Filter -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-6">
+                    <select name="status" class="form-select">
+                        <option value="">All Status</option>
+                        <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+                        <option value="supervisor_review" {% if status_filter == 'supervisor_review' %}selected{% endif %}>Supervisor Review</option>
+                        <option value="approved_supervisor" {% if status_filter == 'approved_supervisor' %}selected{% endif %}>Approved by Supervisor</option>
+                        <option value="stock_agent_review" {% if status_filter == 'stock_agent_review' %}selected{% endif %}>Stock Agent Review</option>
+                        <option value="approved_stock_agent" {% if status_filter == 'approved_stock_agent' %}selected{% endif %}>Approved by Stock Agent</option>
+                        <option value="fulfilled" {% if status_filter == 'fulfilled' %}selected{% endif %}>Fulfilled</option>
+                        <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Rejected</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-filter"></i> Filter
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Demands Table -->
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Demand #</th>
+                        <th>Material</th>
+                        <th>Qty</th>
+                        <th>Priority</th>
+                        <th>Progress</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for demand in demands.items %}
+                    <tr>
+                        <td><strong>{{ demand.demand_number }}</strong></td>
+                        <td>
+                            {{ demand.material.name }}
+                            <br><small class="text-muted">{{ demand.material.code }}</small>
+                        </td>
+                        <td>{{ demand.quantity_requested }}</td>
+                        <td>
+                            <span class="badge 
+                                {% if demand.priority == 'urgent' %}bg-danger
+                                {% elif demand.priority == 'high' %}bg-warning
+                                {% else %}bg-info{% endif %}">
+                                {{ demand.priority | upper }}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar" role="progressbar" style="width: {{ demand.progress_percentage }}%" 
+                                     aria-valuenow="{{ demand.progress_percentage }}" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                            <small>{{ demand.progress_percentage }}%</small>
+                        </td>
+                        <td>
+                            <span class="badge 
+                                {% if demand.demand_status == 'fulfilled' %}bg-success
+                                {% elif demand.demand_status == 'rejected' %}bg-danger
+                                {% elif demand.demand_status == 'approved_stock_agent' %}bg-info
+                                {% elif demand.demand_status == 'approved_supervisor' %}bg-secondary
+                                {% else %}bg-warning{% endif %}">
+                                {{ demand.demand_status | replace('_', ' ') | upper }}
+                            </span>
+                        </td>
+                        <td>{{ demand.created_at.strftime('%d-%m-%Y') }}</td>
+                        <td>
+                            <a href="{{ url_for('demands.detail', demand_id=demand.id) }}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i> View
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">No demands found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if demands.pages > 1 %}
+    <nav aria-label="Page navigation" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if demands.has_prev %}
+            <li class="page-item">
+                <a class="page-link" href="?page=1&status={{ status_filter }}">First</a>
+            </li>
+            {% endif %}
+            
+            {% for page_num in demands.iter_pages() %}
+                {% if page_num %}
+                    {% if page_num == demands.page %}
+                    <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+                    {% else %}
+                    <li class="page-item"><a class="page-link" href="?page={{ page_num }}&status={{ status_filter }}">{{ page_num }}</a></li>
+                    {% endif %}
+                {% endif %}
+            {% endfor %}
+
+            {% if demands.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ demands.pages }}&status={{ status_filter }}">Last</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

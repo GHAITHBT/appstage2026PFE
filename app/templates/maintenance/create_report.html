@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Create Maintenance Report{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-file-text-fill"></i> Maintenance Report 
+                {% if report_type == 'detailed' %}
+                    <span class="badge bg-success">Detailed</span>
+                {% else %}
+                    <span class="badge bg-info">Standard</span>
+                {% endif %}
+            </h2>
+            <p class="text-muted">{{ schedule.machine.name }} - {{ schedule.scheduled_date.strftime('%d-%m-%Y') }}</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('maintenance.schedule_detail', schedule_id=schedule.id) }}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST">
+                        <!-- Basic Information -->
+                        <h5 class="mb-3"><i class="bi bi-info-circle"></i> Basic Information</h5>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Start Time <span class="text-danger">*</span></label>
+                                <input type="datetime-local" name="actual_start_time" class="form-control" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">End Time <span class="text-danger">*</span></label>
+                                <input type="datetime-local" name="actual_end_time" class="form-control" required>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Work Description <span class="text-danger">*</span></label>
+                            <textarea name="work_description" class="form-control" rows="3" placeholder="Describe the work performed..." required></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Findings</label>
+                            <textarea name="findings" class="form-control" rows="3" placeholder="What did you observe or find?"></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Actions Taken</label>
+                            <textarea name="actions_taken" class="form-control" rows="3" placeholder="What actions were taken..."></textarea>
+                        </div>
+
+                        <div class="form-check mb-3">
+                            <input type="checkbox" class="form-check-input" name="issues_found" id="issues_found">
+                            <label class="form-check-label" for="issues_found">
+                                Issues/Problems Found?
+                            </label>
+                        </div>
+
+                        <div class="mb-3" id="issue_description_div" style="display:none;">
+                            <label class="form-label">Issue Description</label>
+                            <textarea name="issue_description" class="form-control" rows="3" placeholder="Describe the issues..."></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Components Replaced</label>
+                            <textarea name="components_replaced" class="form-control" rows="2" placeholder="List replaced components..."></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Next Maintenance Recommendation</label>
+                            <textarea name="next_maintenance_recommendation" class="form-control" rows="3" placeholder="When and what for next maintenance..."></textarea>
+                        </div>
+
+                        {% if report_type == 'detailed' %}
+                        <!-- Detailed Information -->
+                        <hr class="my-4">
+                        <h5 class="mb-3"><i class="bi bi-file-earmark-text"></i> Detailed Information</h5>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Machine Condition (Before)</label>
+                                <select name="machine_condition" class="form-select">
+                                    <option value="">Select condition...</option>
+                                    <option value="excellent">Excellent</option>
+                                    <option value="good">Good</option>
+                                    <option value="fair">Fair</option>
+                                    <option value="poor">Poor</option>
+                                    <option value="critical">Critical</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Machine Condition (After)</label>
+                                <select name="machine_condition_after" class="form-select">
+                                    <option value="">Select condition...</option>
+                                    <option value="excellent">Excellent</option>
+                                    <option value="good">Good</option>
+                                    <option value="fair">Fair</option>
+                                    <option value="poor">Poor</option>
+                                    <option value="critical">Critical</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Environmental Conditions</label>
+                            <textarea name="environmental_conditions" class="form-control" rows="2" placeholder="Temperature, humidity, lighting, etc."></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Safety Observations</label>
+                            <textarea name="safety_observations" class="form-control" rows="2" placeholder="Any safety concerns or observations..."></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Tools Used</label>
+                            <textarea name="tools_used" class="form-control" rows="2" placeholder="List tools and equipment used..."></textarea>
+                        </div>
+                        {% endif %}
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{{ url_for('maintenance.schedule_detail', schedule_id=schedule.id) }}" class="btn btn-outline-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle"></i> Submit Report
+                            </button>
+<script>
+document.getElementById('issues_found').addEventListener('change', function() {
+    document.getElementById('issue_description_div').style.display = this.checked ? 'block' : 'none';
+});
+</script>
+{% endblock %}

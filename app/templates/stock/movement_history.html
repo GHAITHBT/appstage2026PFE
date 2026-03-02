@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Stock Movement History{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-clock-history"></i> Stock Movement History</h2>
+            <p class="text-muted">Complete transaction history of all stock movements</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('stock.inventory') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Inventory
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Filter by Material</label>
+                    <select name="material_id" class="form-select">
+                        <option value="">All Materials</option>
+                        {% for material in materials %}
+                        <option value="{{ material.id }}" {% if material_id|int == material.id %}selected{% endif %}>
+                            {{ material.code }} - {{ material.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Filter by Movement Type</label>
+                    <select name="type" class="form-select">
+                        <option value="">All Types</option>
+                        <option value="addition" {% if movement_type == 'addition' %}selected{% endif %}>Addition</option>
+                        <option value="withdrawal" {% if movement_type == 'withdrawal' %}selected{% endif %}>Withdrawal</option>
+                        <option value="allocated" {% if movement_type == 'allocated' %}selected{% endif %}>Allocated</option>
+                        <option value="fulfilled" {% if movement_type == 'fulfilled' %}selected{% endif %}>Fulfilled</option>
+                        <option value="returned" {% if movement_type == 'returned' %}selected{% endif %}>Returned</option>
+                        <option value="adjustment" {% if movement_type == 'adjustment' %}selected{% endif %}>Adjustment</option>
+                    </select>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search"></i> Search
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Movements Table -->
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date/Time</th>
+                        <th>Material</th>
+                        <th>Movement Type</th>
+                        <th>Quantity</th>
+                        <th>Previous Stock</th>
+                        <th>New Stock</th>
+                        <th>User</th>
+                        <th>Reference</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if movements.items %}
+                        {% for movement in movements.items %}
+                        <tr>
+                            <td>
+                                <small>{{ movement.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('stock.material_detail', material_id=movement.material_id) }}">
+                                    <strong>{{ movement.material.code }}</strong><br>
+                                    <small class="text-muted">{{ movement.material.name[:30] }}</small>
+                                </a>
+                            </td>
+                            <td>
+                                {% if movement.movement_type == 'addition' %}
+                                    <span class="badge bg-success"><i class="bi bi-plus-circle"></i> Addition</span>
+                                {% elif movement.movement_type == 'withdrawal' %}
+                                    <span class="badge bg-danger"><i class="bi bi-dash-circle"></i> Withdrawal</span>
+                                {% elif movement.movement_type == 'allocated' %}
+                                    <span class="badge bg-info"><i class="bi bi-arrow-left-right"></i> Allocated</span>
+                                {% elif movement.movement_type == 'fulfilled' %}
+                                    <span class="badge bg-primary"><i class="bi bi-check-circle"></i> Fulfilled</span>
+                                {% elif movement.movement_type == 'returned' %}
+                                    <span class="badge bg-warning"><i class="bi bi-arrow-left"></i> Returned</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ movement.movement_type }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <strong>{{ movement.quantity }}</strong>
+                            </td>
+                            <td>
+                                <small>{{ movement.previous_stock }}</small>
+                            </td>
+                            <td>
+                                <strong>{{ movement.new_stock }}</strong>
+                            </td>
+                            <td>
+                                {% if movement.user %}
+                                    <small>{{ movement.user.full_name }}</small>
+                                {% else %}
+                                    <small class="text-muted">System</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if movement.reference_type and movement.reference_id %}
+                                    <small class="text-muted">{{ movement.reference_type }} #{{ movement.reference_id }}</small>
+                                {% else %}
+                                    <small class="text-muted">-</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if movement.notes %}
+                                    <small title="{{ movement.notes }}">{{ movement.notes[:30] }}...</small>
+                                {% elif movement.return_reason %}
+                                    <small class="text-warning" title="{{ movement.return_reason }}"><i class="bi bi-info-circle"></i> Return: {{ movement.return_reason[:20] }}...</small>
+                                {% else %}
+                                    <small class="text-muted">-</small>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="9" class="text-center py-4">
+                                <p class="text-muted mb-0">No movements found</p>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if movements.pages > 1 %}
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if movements.has_prev %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('stock.movement_history', page=movements.prev_num, material_id=material_id, type=movement_type) }}">Previous</a>
+            </li>
+            {% endif %}
+            
+            {% for page_num in movements.iter_pages() %}
+                {% if page_num %}
+                    {% if page_num == movements.page %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ page_num }}</span>
+                    </li>
+                    {% else %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('stock.movement_history', page=page_num, material_id=material_id, type=movement_type) }}">{{ page_num }}</a>
+                    </li>
+                    {% endif %}
+                {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">...</span>
+                </li>
+                {% endif %}
+            {% endfor %}
+            
+            {% if movements.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('stock.movement_history', page=movements.next_num, material_id=material_id, type=movement_type) }}">Next</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

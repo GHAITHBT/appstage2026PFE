@@ -1,0 +1,125 @@
+"""
+FLASK DATABASE CONFIGURATION UPDATE
+Change database name from 'maintenance_system' to 'maintenance_system_v2'
+"""
+
+# ============================================
+# OPTION 1: UPDATE config.py (RECOMMENDED)
+# ============================================
+# Current line in config.py (around line 10-15):
+# SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://root:password@localhost/maintenance_system'
+
+# Change to:
+# SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://root:password@localhost/maintenance_system_v2'
+
+# Full example config.py update:
+"""
+import os
+from datetime import timedelta
+
+class Config:
+    # Database
+    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://root:your_password@localhost/maintenance_system_v2'
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    
+    # Flask
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'your-secret-key-here'
+    PERMANENT_SESSION_LIFETIME = timedelta(minutes=30)
+    SESSION_PERMANENT = True
+    SESSION_REFRESH_EACH_REQUEST = True
+    
+    # Other settings...
+"""
+
+# ============================================
+# OPTION 2: USE ENVIRONMENT VARIABLE
+# ============================================
+# Create a .env file in your project root:
+"""
+DATABASE_URL=mysql+pymysql://root:password@localhost/maintenance_system_v2
+SECRET_KEY=your-secret-key-here
+"""
+
+# Then in config.py:
+"""
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'mysql+pymysql://root:password@localhost/maintenance_system_v2'
+"""
+
+# ============================================
+# STEPS TO UPDATE DATABASE NAME
+# ============================================
+# 1. Open CREATE_FRESH_DATABASE.sql
+# 2. Run in MySQL Workbench: Select all → Execute
+# 3. Wait for "✓ DATABASE CREATION COMPLETE!" message
+# 4. Edit config.py - change database name from 'maintenance_system' to 'maintenance_system_v2'
+# 5. Restart Flask: python main.py
+# 6. Test by logging in with username: admin, password: (needs to be set)
+
+# ============================================
+# HOW TO FIND config.py
+# ============================================
+# Location: c:\Users\Ghaith.bentouati\OneDrive - Sumitomo Wiring Systems\Bureau\App stage 2026\config.py
+
+# ============================================
+# QUICK FIX SEARCH & REPLACE
+# ============================================
+# In VS Code:
+# 1. Ctrl+H (Find and Replace)
+# 2. Find: maintenance_system
+# 3. Replace with: maintenance_system_v2
+# 4. Click "Replace All"
+
+# ============================================
+# FILES THAT MIGHT HAVE DATABASE NAME
+# ============================================
+# - config.py (MAIN - must update)
+# - main.py (check if database URL hardcoded)
+# - app/__init__.py (check for database initialization)
+# - .env file (if using environment variables)
+
+# ============================================
+# DEFAULT LOGIN CREDENTIALS (AFTER SETUP)
+# ============================================
+# Username: admin
+# Password: (needs to be set - see below)
+
+# To set admin password, run this after migration:
+"""
+from werkzeug.security import generate_password_hash
+
+# In Python/Flask shell:
+from app import db, User
+
+admin = User.query.filter_by(username='admin').first()
+admin.password = generate_password_hash('your_new_password')
+db.session.commit()
+print("Admin password updated!")
+"""
+
+# ============================================
+# RESTORE FROM BACKUP (if needed)
+# ============================================
+# If you want to keep both databases:
+# 1. Don't delete maintenance_system
+# 2. Create maintenance_system_v2 (new one)
+# 3. Update config.py to use _v2
+# 4. Keep original as backup
+
+# To restore original:
+# 1. Update config.py back to 'maintenance_system'
+# 2. Restart Flask: python main.py
+
+# ============================================
+# VERIFY NEW DATABASE WORKS
+# ============================================
+# After running CREATE_FRESH_DATABASE.sql and updating config.py:
+# 1. Open terminal in your project folder
+# 2. Run: python main.py
+# 3. Open browser: http://localhost:5000
+# 4. Try to login with username: admin
+# 5. Check if dashboard loads without errors

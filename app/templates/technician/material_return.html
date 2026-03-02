@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+
+{% block title %}Return Material to Stock{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1>Return Material to Stock</h1>
+    <p class="text-muted">Submit materials that are no longer needed below</p>
+    
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="form-group">
+                            <label for="material_id">Select Material to Return *</label>
+                            <select class="form-control" id="material_id" name="material_id" required>
+                                <option value="">-- Choose a material --</option>
+                                {% for item in fulfilled_demands %}
+                                <option value="{{ item.material_id }}">
+                                    {{ item.material_name }} (Quantity: {{ item.original_quantity }}, Returned: {{ item.quantity_returned or 0 }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="form-text text-muted">Shows materials from your fulfilled demands</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="quantity">Quantity to Return *</label>
+                            <input type="number" class="form-control" id="quantity" name="quantity" min="1" required>
+                            <small class="form-text text-muted">Must be positive number</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="return_reason">Reason for Return *</label>
+                            <select class="form-control" id="return_reason" name="return_reason" required>
+                                <option value="">-- Select reason --</option>
+                                <option value="Excess allocated">Excess allocated - Not needed</option>
+                                <option value="Defective">Defective - Cannot use</option>
+                                <option value="Wrong specification">Wrong specification</option>
+                                <option value="Over-ordered">Over-ordered</option>
+                                <option value="Work cancelled">Work cancelled</option>
+                                <option value="Other">Other reason</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="condition_of_material">Condition of Material *</label>
+                            <select class="form-control" id="condition_of_material" name="condition_of_material" required>
+                                <option value="">-- Select condition --</option>
+                                <option value="Unused - Original packaging">Unused - Original packaging</option>
+                                <option value="Unused - Without packaging">Unused - Without packaging</option>
+                                <option value="Used - Good condition">Used - Good condition</option>
+                                <option value="Used - Minor damage">Used - Minor damage</option>
+                                <option value="Used - Cannot reuse">Used - Cannot reuse</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="notes">Additional Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="4" placeholder="Any additional information about the return..."></textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-primary">Submit Return Request</button>
+                            <a href="/technician" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card bg-light">
+                <div class="card-header">
+                    <h5>Return Process</h5>
+                </div>
+                <div class="card-body">
+                    <ol>
+                        <li>Fill out the return form</li>
+                        <li>Submit for stock agent review</li>
+                        <li>Status changes to "Pending Approval"</li>
+                        <li>Stock agent reviews and accepts/rejects</li>
+                        <li>If accepted, material returns to stock</li>
+                    </ol>
+                    <hr>
+                    <p><small><strong>Tip:</strong> Check your return status from the dashboard.</small></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

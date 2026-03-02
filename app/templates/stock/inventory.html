@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}Stock Inventory{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-box2"></i> Stock Inventory</h2>
+            <p class="text-muted">Manage your materials and stock levels</p>
+        </div>
+        <div class="col-md-4 text-end">
+            {% if current_user.role in ['admin', 'stock_agent'] %}
+            <a href="{{ url_for('stock.add_material') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Add Material
+            </a>
+            {% endif %}
+            {% if current_user.role in ['admin', 'stock_agent'] %}
+            <a href="{{ url_for('stock.pending_returns') }}" class="btn btn-info ms-2">
+                <i class="bi bi-inbox"></i> Pending Returns
+            </a>
+            {% endif %}
+            {% if current_user.role in ['admin', 'technician', 'supervisor'] %}
+            <a href="{{ url_for('stock.return_material') }}" class="btn btn-warning ms-2">
+                <i class="bi bi-arrow-counterclockwise"></i> Return Material
+            </a>
+            {% endif %}
+            <a href="{{ url_for('stock.stock_alerts') }}" class="btn btn-warning ms-2">
+                <i class="bi bi-bell"></i> Alerts
+            </a>
+            <a href="{{ url_for('stock.movement_history') }}" class="btn btn-secondary ms-2">
+                <i class="bi bi-clock-history"></i> History
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-4">
+                    <input type="text" name="search" class="form-control" placeholder="Search by code or name..." value="{{ search }}">
+                </div>
+                <div class="col-md-4">
+                    <select name="category" class="form-select">
+                        <option value="">All Categories</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat }}" {% if category == cat %}selected{% endif %}>{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search"></i> Search
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Materials Table -->
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>Current Stock</th>
+                        <th>Min / Max</th>
+                        <th>Status</th>
+                        <th>Unit Cost</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for material in materials.items %}
+                    <tr>
+                        <td>
+                            <span class="badge bg-light text-dark">{{ material.code }}</span>
+                        </td>
+                        <td>
+                            <strong>{{ material.name }}</strong>
+                            {% if material.description %}
+                            <br><small class="text-muted">{{ material.description[:50] }}...</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary">{{ material.category }}</span>
+                        </td>
+                        <td>
+                            <strong>{{ material.current_stock }}</strong> {{ material.unit }}
+                        </td>
+                        <td>{{ material.min_stock }} / {{ material.max_stock }}</td>
+                        <td>
+                            {% if material.stock_status == 'critical' %}
+                            <span class="badge bg-danger"><i class="bi bi-exclamation-circle"></i> Critical</span>
+                            {% elif material.stock_status == 'warning' %}
+                            <span class="badge bg-warning"><i class="bi bi-exclamation-triangle"></i> Warning</span>
+                            {% else %}
+                            <span class="badge bg-success"><i class="bi bi-check-circle"></i> Normal</span>
+                            {% endif %}
+                        </td>
+                        <td>${{ "%.2f"|format(material.unit_cost) }}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a href="{{ url_for('stock.material_detail', material_id=material.id) }}" class="btn btn-outline-info" title="View">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                {% if current_user.role in ['admin', 'stock_agent'] %}
+                                <a href="{{ url_for('stock.edit_material', material_id=material.id) }}" class="btn btn-outline-primary" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">No materials found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if materials.pages > 1 %}
+    <nav aria-label="Page navigation" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if materials.has_prev %}
+            <li class="page-item">
+                <a class="page-link" href="?page=1&search={{ search }}&category={{ category }}">First</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ materials.prev_num }}&search={{ search }}&category={{ category }}">Previous</a>
+            </li>
+            {% endif %}
+
+            {% for page_num in materials.iter_pages() %}
+                {% if page_num %}
+                    {% if page_num == materials.page %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ page_num }}</span>
+                    </li>
+                    {% else %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_num }}&search={{ search }}&category={{ category }}">{{ page_num }}</a>
+                    </li>
+                    {% endif %}
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+                {% endif %}
+            {% endfor %}
+
+            {% if materials.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ materials.next_num }}&search={{ search }}&category={{ category }}">Next</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ materials.pages }}&search={{ search }}&category={{ category }}">Last</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}Schedule Detail{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-calendar-check"></i> {{ schedule.machine.name }}</h2>
+            <p class="text-muted">Scheduled for {{ schedule.scheduled_date.strftime('%d-%m-%Y') }}</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <div class="btn-group" role="group">
+                {% if schedule.status == 'scheduled' %}
+                <form action="{{ url_for('maintenance.update_schedule_status', schedule_id=schedule.id, status='in_progress') }}" method="POST" style="display:inline;">
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-play-circle"></i> Start
+                    </button>
+                </form>
+                {% endif %}
+                
+                {% if schedule.status == 'in_progress' and reports and reports|selectattr('report_status', 'in', ['submitted', 'approved'])|list %}
+                <form action="{{ url_for('maintenance.update_schedule_status', schedule_id=schedule.id, status='completed') }}" method="POST" style="display:inline;">
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-circle"></i> End Maintenance
+                    </button>
+                </form>
+                {% endif %}
+                <a href="{{ url_for('maintenance.schedules') }}" class="btn btn-outline-primary">Back</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Schedule Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="text-muted small">Machine</label>
+                        <p><strong>{{ schedule.machine.name }}</strong> ({{ schedule.machine.machine_code }})</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Type</label>
+                        <p>{{ schedule.schedule_type or 'Standard' }}</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Supervisor</label>
+                        <p><strong>{{ schedule.supervisor.full_name }}</strong></p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Status</label>
+                        <p>
+                            <span class="badge 
+                                {% if schedule.status == 'completed' %}bg-success
+                                {% elif schedule.status == 'in_progress' %}bg-info
+                                {% elif schedule.status == 'overdue' %}bg-danger
+                                {% else %}bg-warning{% endif %}">
+                                {{ schedule.status | upper }}
+                            </span>
+                        </p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Priority</label>
+                        <p>
+                            <span class="badge 
+                                {% if schedule.priority == 'critical' %}bg-danger
+                                {% elif schedule.priority == 'high' %}bg-warning
+                                {% else %}bg-info{% endif %}">
+                                {{ schedule.priority | upper }}
+                            </span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Details</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="text-muted small">Scheduled Date</label>
+                        <p><strong>{{ schedule.scheduled_date.strftime('%d-%m-%Y') }}</strong></p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Estimated Duration</label>
+                        <p>{{ schedule.estimated_duration_hours }} hours</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Frequency</label>
+                        <p>Every {{ schedule.frequency_days }} days</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Description</label>
+                        <p>{{ schedule.description or '-' }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Maintenance Reports -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-file-text"></i> Maintenance Reports</h5>
+                    {% if schedule.status in ['in_progress', 'completed'] and current_user.role in ['technician', 'supervisor']  %}
+                    <a href="{{ url_for('maintenance.create_report', schedule_id=schedule.id) }}" class="btn btn-sm btn-primary">
+                        <i class="bi bi-plus-circle"></i> Add Report
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Technician</th>
+                                <th>Date</th>
+                                <th>Duration</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for report in reports %}
+                            <tr>
+                                <td><strong>{{ report.technician.full_name }}</strong></td>
+                                <td>{{ report.created_at.strftime('%d-%m-%Y %H:%M') }}</td>
+                                <td>{% if report.actual_duration_hours %}{{ "%.2f"|format(report.actual_duration_hours) }} hours{% else %}-{% endif %}</td>
+                                <td>
+                                    <span class="badge 
+                                        {% if report.report_status == 'approved' %}bg-success
+                                        {% elif report.report_status == 'rejected' %}bg-danger
+                                        {% elif report.report_status == 'submitted' %}bg-info
+                                        {% else %}bg-warning{% endif %}">
+                                        {{ report.report_status | upper }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('maintenance.report_detail', report_id=report.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-eye"></i> View
+                                    </a>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-3">No reports yet</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Related Demands -->
+    {% if demands %}
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-cart-check"></i> Related Spare Parts Demands</h5>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Demand #</th>
+                                <th>Material</th>
+                                <th>Quantity</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for demand in demands %}
+                            <tr>
+                                <td><strong>{{ demand.demand_number }}</strong></td>
+                                <td>{{ demand.material.name }}</td>
+                                <td>{{ demand.quantity_requested }}</td>
+                                <td>
+                                    <span class="badge bg-{% if demand.demand_status == 'fulfilled' %}success{% else %}warning{% endif %}">
+                                        {{ demand.demand_status | replace('_', ' ') | upper }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('demands.detail', demand_id=demand.id) }}" class="btn btn-sm btn-outline-primary">View</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

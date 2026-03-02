@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Register User{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-person-plus"></i> Register New User</h2>
+            <p class="text-muted">Create a new user account with specific role and permissions</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('auth.profile') }}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}" role="alert">
+                                {{ message }}
+                            </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <form method="POST">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">First Name *</label>
+                                <input type="text" class="form-control" name="first_name" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Last Name *</label>
+                                <input type="text" class="form-control" name="last_name" required>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Username *</label>
+                                <input type="text" class="form-control" name="username" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Email *</label>
+                                <input type="email" class="form-control" name="email" required>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Department</label>
+                                <input type="text" class="form-control" name="department">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Role *</label>
+                                <select class="form-select" name="role" required onchange="toggleZoneField()">
+                                    <option value="technician">Technician</option>
+                                    <option value="supervisor">Supervisor</option>
+                                    <option value="stock_agent">Stock Agent</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row" id="zone-row" style="display: block;">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Work Zone (for Technicians)</label>
+                                <select class="form-select" name="zone" id="zone-select">
+                                    <option value="">-- Select a zone --</option>
+                                    {% for zone in zones %}
+                                    <option value="{{ zone.name }}">{{ zone.name }} {% if zone.location %}({{ zone.location }}){% endif %}</option>
+                                    {% endfor %}
+                                </select>
+                                <small class="text-muted">Select from available zones or manage zones from admin panel</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Supervisor (for Technicians)</label>
+                                <select class="form-select" name="supervisor_id" id="supervisor-select">
+                                    <option value="">-- No Supervisor --</option>
+                                    {% for supervisor in supervisors %}
+                                    <option value="{{ supervisor.id }}">{{ supervisor.full_name }} ({{ supervisor.role|title }})</option>
+                                    {% endfor %}
+                                </select>
+                                <small class="text-muted">Assign a supervisor to route demands and reports</small>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Password *</label>
+                                <input type="password" class="form-control" name="password" required>
+                                <small class="text-muted">Minimum 8 characters</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Confirm Password *</label>
+                                <input type="password" class="form-control" name="confirm_password" required>
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle"></i> Create User
+                            </button>
+                            <a href="{{ url_for('auth.profile') }}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleZoneField() {
+    const roleSelect = document.querySelector('select[name="role"]');
+    const zoneRow = document.getElementById('zone-row');
+    // Show zone and supervisor fields only for technicians
+    zoneRow.style.display = roleSelect.value === 'technician' ? 'block' : 'none';
+}
+// Show zone field if technician is selected on page load
+toggleZoneField();
+</script>
+{% endblock %}
