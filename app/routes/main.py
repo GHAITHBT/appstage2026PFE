@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
-from app.models import db, Material, Machine, MaintenanceSchedule, SparePartsDemand, StockAlert, User, MaterialReturn, Zone, MaintenanceReport
+from app.models import db, Material, Machine, MaintenanceSchedule, SparePartsDemand, StockAlert, StockMovement, User, MaterialReturn, Zone, MaintenanceReport
 from app.routes.auth import login_required, role_required
 from datetime import datetime, timedelta
 
@@ -71,6 +71,22 @@ def dashboard():
             'url': 'auth.list_users',
             'roles': ['admin'],
             'color': '#ec4899'
+        },
+        'analytics_maintenance': {
+            'title': 'Technician Performance Analytics',
+            'icon': 'graph-up',
+            'description': 'View technician performance and productivity metrics',
+            'url': 'main.analytics',
+            'roles': ['admin', 'supervisor'],
+            'color': '#667eea'
+        },
+        'analytics_stock': {
+            'title': 'Stock Analytics',
+            'icon': 'bar-chart',
+            'description': 'View stock levels and inventory metrics',
+            'url': 'main.analytics',
+            'roles': ['admin', 'supervisor', 'stock_agent'],
+            'color': '#06b6d4'
         }
     }
     
@@ -146,12 +162,173 @@ def dashboard():
 
 @main_bp.route('/analytics')
 @login_required
-@role_required('admin')
+@role_required('admin', 'supervisor', 'stock_agent')
 def analytics():
-    """Admin analytics dashboard showing technician performance metrics"""
-    from sqlalchemy import func, desc
+    """Analytics dashboard showing key performance indicators and maintenance metrics"""
+    from sqlalchemy import func, desc, and_
+    from datetime import datetime, timedelta
     
-    # Get all technicians and their performance metrics
+    # Get date range from request or use last 30 days
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    if start_date:
+        try:
+            start_date = datetime.strptime(start_date, '%m/%d/%Y')
+        except:
+            start_date = datetime.utcnow() - timedelta(days=30)
+    else:
+        start_date = datetime.utcnow() - timedelta(days=30)
+    
+    if end_date:
+        try:
+            end_date = datetime.strptime(end_date, '%m/%d/%Y')
+        except:
+            end_date = datetime.utcnow()
+    else:
+        end_date = datetime.utcnow()
+    
+    # ========== KPI CALCULATIONS ==========
+    
+    # Total Events (maintenance reports)
+    total_events = MaintenanceReport.query.filter(
+        MaintenanceReport.created_at.between(start_date, end_date)
+    ).count()
+    
+    # Total Downtime in hours
+    total_downtime_hours = db.session.query(
+        func.sum(MaintenanceReport.actual_duration_hours)
+    ).filter(
+        MaintenanceReport.created_at.between(start_date, end_date)
+    ).scalar() or 0
+    total_downtime_hours = round(float(total_downtime_hours), 2)
+    
+    # Canceled/Rejected Events
+    canceled_events = MaintenanceReport.query.filter(
+        MaintenanceReport.report_status == 'rejected',
+        MaintenanceReport.created_at.between(start_date, end_date)
+    ).count()
+    
+    # Average Downtime in seconds
+    avg_downtime_seconds = 0
+    if total_events > 0:
+        avg_hours = db.session.query(
+            func.avg(MaintenanceReport.actual_duration_hours)
+        ).filter(
+            MaintenanceReport.created_at.between(start_date, end_date)
+        ).scalar() or 0
+        avg_downtime_seconds = round(float(avg_hours) * 3600, 2)
+    
+    # Availability Rate (%) - assuming 24hr operation
+    availability_rate = 0
+    if total_events > 0 and total_downtime_hours > 0:
+        operational_hours = (end_date - start_date).total_seconds() / 3600
+        availability_rate = round((1 - (total_downtime_hours / operational_hours)) * 100, 2)
+        availability_rate = max(0, min(100, availability_rate))  # Clamp 0-100
+    
+    # Failure Rate (per hour)
+    failure_rate = 0
+    if total_downtime_hours > 0:
+        failure_rate = round(canceled_events / (total_downtime_hours or 1), 2)
+    
+    # Mean Time To Repair (MTTR) in seconds
+    mttr_seconds = 0
+    if total_events > 0:
+        mttr_hours = db.session.query(
+            func.avg(MaintenanceReport.actual_duration_hours)
+        ).filter(
+            MaintenanceReport.created_at.between(start_date, end_date),
+            MaintenanceReport.actual_duration_hours.isnot(None)
+        ).scalar() or 0
+        mttr_seconds = round(float(mttr_hours) * 3600, 2)
+    
+    # Mean Time Between Failures (MTBF) in hours
+    mtbf_hours = 0
+    if canceled_events > 0:
+        operational_days = (end_date - start_date).days or 1
+        mtbf_hours = round(operational_days * 24 / (canceled_events or 1), 2)
+    
+    # Most Common Event Type / Report Type
+    most_common_event = db.session.query(
+        MaintenanceReport.report_type,
+        func.count(MaintenanceReport.id).label('count')
+    ).filter(
+        MaintenanceReport.created_at.between(start_date, end_date)
+    ).group_by(MaintenanceReport.report_type)\
+     .order_by(desc('count'))\
+     .first()
+    most_common_event_type = most_common_event[0] if most_common_event else 'N/A'
+    
+    # Most Active User (technician with most reports)
+    most_active_user = db.session.query(
+        User.first_name,
+        User.last_name,
+        func.count(MaintenanceReport.id).label('count')
+    ).join(MaintenanceReport, User.id == MaintenanceReport.technician_id)\
+     .filter(MaintenanceReport.created_at.between(start_date, end_date))\
+     .group_by(User.id)\
+     .order_by(desc('count'))\
+     .first()
+    most_active_user_name = f"{most_active_user[0]} {most_active_user[1]}" if most_active_user else 'N/A'
+    
+    # Top Resolver (user with highest approval rate)
+    top_resolver = db.session.query(
+        User.first_name,
+        User.last_name,
+        func.count(MaintenanceReport.id).label('total'),
+        func.sum(func.cast(MaintenanceReport.report_status == 'approved', db.Integer)).label('approved')
+    ).join(MaintenanceReport, User.id == MaintenanceReport.technician_id)\
+     .filter(MaintenanceReport.created_at.between(start_date, end_date))\
+     .group_by(User.id)\
+     .order_by(desc('approved'))\
+     .first()
+    top_resolver_name = f"{top_resolver[0]} {top_resolver[1]}" if top_resolver else 'N/A'
+    
+    # Most Common Maintenance Type (from issue_description or machine_condition)
+    most_common_maintenance = db.session.query(
+        MaintenanceReport.machine_condition,
+        func.count(MaintenanceReport.id).label('count')
+    ).filter(
+        MaintenanceReport.created_at.between(start_date, end_date),
+        MaintenanceReport.machine_condition.isnot(None)
+    ).group_by(MaintenanceReport.machine_condition)\
+     .order_by(desc('count'))\
+     .first()
+    most_common_maintenance_type = most_common_maintenance[0] if most_common_maintenance else 'N/A'
+    
+    # Events per Machine
+    events_per_machine = db.session.query(
+        MaintenanceReport.machine_name,
+        func.count(MaintenanceReport.id).label('count'),
+        func.sum(MaintenanceReport.actual_duration_hours).label('total_hours')
+    ).filter(
+        MaintenanceReport.created_at.between(start_date, end_date)
+    ).group_by(MaintenanceReport.machine_name)\
+     .order_by(desc('count'))\
+     .limit(10)\
+     .all()
+    
+    events_per_machine = [{
+        'machine': m[0] or 'Unknown',
+        'count': m[1],
+        'hours': round(m[2], 2) if m[2] else 0
+    } for m in events_per_machine]
+    
+    # Events by Type (Status distribution)
+    events_by_type = db.session.query(
+        MaintenanceReport.report_status,
+        func.count(MaintenanceReport.id).label('count')
+    ).filter(
+        MaintenanceReport.created_at.between(start_date, end_date)
+    ).group_by(MaintenanceReport.report_status)\
+     .all()
+    
+    events_by_type = [{
+        'status': e[0] or 'Unknown',
+        'count': e[1]
+    } for e in events_by_type]
+    
+    # Get technician stats for performance table
     technician_stats = db.session.query(
         User.id,
         User.first_name,
@@ -165,7 +342,6 @@ def analytics():
      .group_by(User.id)\
      .all()
     
-    # Convert to list of dicts for easier template processing
     technicians = []
     for stat in technician_stats:
         technicians.append({
@@ -173,50 +349,162 @@ def analytics():
             'name': f"{stat.first_name} {stat.last_name}",
             'zone': stat.zone or 'No Zone',
             'total_reports': stat.total_reports or 0,
-            'total_hours': stat.total_hours or 0,
+            'total_hours': round(stat.total_hours, 2) if stat.total_hours else 0,
             'avg_hours': round(stat.avg_hours, 2) if stat.avg_hours else 0
         })
     
-    # Sort to get top performers
     most_reports = sorted(technicians, key=lambda x: x['total_reports'], reverse=True)[:5]
     most_time = sorted(technicians, key=lambda x: x['total_hours'], reverse=True)[:5]
     fastest = sorted(technicians, key=lambda x: x['avg_hours'])[:5]
     
-    # Get stats by zone
-    zone_stats = db.session.query(
-        User.zone,
-        func.count(MaintenanceReport.id).label('total_reports'),
-        func.sum(MaintenanceReport.actual_duration_hours).label('total_hours'),
-        func.count(func.distinct(User.id)).label('technicians')
-    ).join(User, User.id == MaintenanceReport.technician_id)\
-     .filter(User.zone.isnot(None))\
-     .group_by(User.zone)\
+    # ========== STOCK KPI CALCULATIONS ==========
+    
+    # Total Spare Parts in System
+    total_spare_parts = Material.query.count()
+    
+    # Total Stock Value (sum of current_stock * unit_cost)
+    total_stock_value = db.session.query(
+        func.sum(Material.current_stock * Material.unit_cost)
+    ).scalar() or 0
+    total_stock_value = round(float(total_stock_value), 2)
+    
+    # Low Stock Items (current_stock <= min_stock)
+    low_stock_items = Material.query.filter(
+        Material.current_stock <= Material.min_stock
+    ).count()
+    
+    # Overstock Items (current_stock >= max_stock)
+    overstock_items = Material.query.filter(
+        Material.current_stock >= Material.max_stock
+    ).count()
+    
+    # Critical Stock Items (current_stock <= reorder_point or no stock at all)
+    critical_stock_items = Material.query.filter(
+        db.or_(Material.current_stock == 0, Material.current_stock <= Material.reorder_point)
+    ).count()
+    
+    # Average Stock Level
+    avg_stock_level = 0
+    materials = Material.query.all()
+    if materials:
+        total_stock = sum([m.current_stock or 0 for m in materials])
+        avg_stock_level = round(total_stock / len(materials), 2)
+    
+    # Stock In Movements (last 30 days)
+    total_stock_in = db.session.query(
+        func.sum(StockMovement.quantity)
+    ).filter(
+        StockMovement.movement_type.in_(['in', 'receipt']),
+        StockMovement.created_at.between(start_date, end_date)
+    ).scalar() or 0
+    
+    # Stock Out Movements (last 30 days)
+    total_stock_out = db.session.query(
+        func.sum(StockMovement.quantity)
+    ).filter(
+        StockMovement.movement_type.in_(['out', 'issue', 'allocated']),
+        StockMovement.created_at.between(start_date, end_date)
+    ).scalar() or 0
+    
+    # Most Used / Most Moved Material
+    most_moved_material = db.session.query(
+        Material.name,
+        func.sum(StockMovement.quantity).label('total_moved')
+    ).join(StockMovement, Material.id == StockMovement.material_id)\
+     .filter(StockMovement.created_at.between(start_date, end_date))\
+     .group_by(Material.id)\
+     .order_by(desc('total_moved'))\
+     .first()
+    most_moved_material_name = most_moved_material[0] if most_moved_material else 'N/A'
+    most_moved_quantity = most_moved_material[1] if most_moved_material else 0
+    
+    # Top Material by Value (current_stock * unit_cost)
+    top_value_material = db.session.query(
+        Material.name,
+        (Material.current_stock * Material.unit_cost).label('total_value')
+    ).filter(Material.unit_cost.isnot(None))\
+     .order_by(desc('total_value'))\
+     .first()
+    top_value_material_name = top_value_material[0] if top_value_material else 'N/A'
+    
+    # Stock Alerts Count
+    active_alerts = StockAlert.query.filter(
+        StockAlert.is_read == False
+    ).count()
+    
+    # Materials by Category
+    materials_by_category = db.session.query(
+        Material.category,
+        func.count(Material.id).label('count'),
+        func.sum(Material.current_stock).label('total_stock')
+    ).filter(Material.category.isnot(None))\
+     .group_by(Material.category)\
+     .order_by(desc('count'))\
      .all()
     
-    zones = [{
-        'name': stat.zone or 'Unassigned',
-        'total_reports': stat.total_reports or 0,
-        'total_hours': stat.total_hours or 0,
-        'avg_hours': round((stat.total_hours or 0) / (stat.total_reports or 1), 2),
-        'technicians': stat.technicians or 0
-    } for stat in zone_stats]
+    materials_by_category_list = [{
+        'category': m[0] or 'Uncategorized',
+        'count': m[1],
+        'total_stock': m[2] or 0
+    } for m in materials_by_category]
     
-    # Overall statistics
-    total_reports = MaintenanceReport.query.count()
-    total_technicians = User.query.filter_by(role='technician').count()
-    total_hours = db.session.query(func.sum(MaintenanceReport.actual_duration_hours)).scalar() or 0
-    avg_report_duration = round(total_hours / total_reports, 2) if total_reports > 0 else 0
+    # Stock Movement Summary
+    movement_summary = db.session.query(
+        StockMovement.movement_type,
+        func.count(StockMovement.id).label('count'),
+        func.sum(StockMovement.quantity).label('total_quantity')
+    ).filter(
+        StockMovement.created_at.between(start_date, end_date)
+    ).group_by(StockMovement.movement_type)\
+     .all()
+    
+    movement_summary_list = [{
+        'type': m[0],
+        'count': m[1],
+        'quantity': m[2]
+    } for m in movement_summary]
+    
+    # Prepare KPI data dictionary
+    kpis = {
+        'total_events': total_events,
+        'total_downtime_hours': total_downtime_hours,
+        'canceled_events': canceled_events,
+        'avg_downtime_seconds': avg_downtime_seconds,
+        'availability_rate': availability_rate,
+        'failure_rate': failure_rate,
+        'mttr_seconds': mttr_seconds,
+        'mtbf_hours': mtbf_hours,
+        'most_common_event_type': most_common_event_type,
+        'most_active_user': most_active_user_name,
+        'top_resolver': top_resolver_name,
+        'most_common_maintenance_type': most_common_maintenance_type,
+        'events_per_machine': events_per_machine,
+        'events_by_type': events_by_type,
+        # Stock KPIs
+        'total_spare_parts': total_spare_parts,
+        'total_stock_value': total_stock_value,
+        'low_stock_items': low_stock_items,
+        'overstock_items': overstock_items,
+        'critical_stock_items': critical_stock_items,
+        'avg_stock_level': avg_stock_level,
+        'total_stock_in': total_stock_in,
+        'total_stock_out': total_stock_out,
+        'most_moved_material': most_moved_material_name,
+        'most_moved_quantity': most_moved_quantity,
+        'top_value_material': top_value_material_name,
+        'active_alerts': active_alerts,
+        'materials_by_category': materials_by_category_list,
+        'movement_summary': movement_summary_list
+    }
     
     return render_template('main/analytics.html',
+                         kpis=kpis,
                          technicians=technicians,
                          most_reports=most_reports,
                          most_time=most_time,
                          fastest=fastest,
-                         zones=zones,
-                         total_reports=total_reports,
-                         total_technicians=total_technicians,
-                         total_hours=round(total_hours, 2),
-                         avg_report_duration=avg_report_duration)
+                         start_date=start_date.strftime('%m/%d/%Y'),
+                         end_date=end_date.strftime('%m/%d/%Y'))
 
 @main_bp.route('/modules')
 @login_required
