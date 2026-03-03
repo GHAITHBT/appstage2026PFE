@@ -24,13 +24,18 @@ class Config:
     SESSION_COOKIE_SAMESITE = 'Lax'
     SESSION_FILE_DIR = os.path.join(os.path.dirname(__file__), 'sessions')
     
-    # SMTP Configuration for Email Notifications
-    MAIL_SERVER = os.environ.get('MAIL_SERVER') or 'localhost'
-    MAIL_PORT = int(os.environ.get('MAIL_PORT') or 25)
-    MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', False)
-    MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
-    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
-    MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER') or 'maintenance@sumitomo.com'
+    # =====================
+    # Mail Configuration (matches gmailtest.py)
+    # =====================
+    MAIL_SERVER = 'smtp.gmail.com'
+    MAIL_PORT = 587
+    MAIL_USE_TLS = True
+    MAIL_USERNAME = 'dabboussiarij@gmail.com'
+    MAIL_PASSWORD = 'ujgo lzbo rjph zhrn'  # Gmail App Password
+    MAIL_DEFAULT_SENDER = 'dabboussiarij@gmail.com'
+    
+    # Email Settings
+    EMAILS_ENABLED = True
     
     # Application Settings
     ITEMS_PER_PAGE = 20
@@ -39,6 +44,9 @@ class Config:
     # Company Information
     COMPANY_NAME = 'Sumitomo Wiring Systems'
     COMPANY_LOGO = 'images/logo.png'
+    # Logo URL for emails - update with your GitHub raw URL after pushing to GitHub
+    # Format: https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/app/static/images/logo.png
+    LOGO_URL = 'https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/app/static/images/logo.png'
 
 class DevelopmentConfig(Config):
     """Development configuration"""

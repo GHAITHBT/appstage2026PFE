@@ -1,8 +1,12 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session, flash
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash, current_app
 from app.models import db, SparePartsDemand, Material, User, MaintenanceReport
 from app.routes.auth import login_required, role_required
+from app.email_service import EmailService
 from datetime import datetime
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 demands_bp = Blueprint('demands', __name__, url_prefix='/demands')
 
@@ -113,7 +117,31 @@ def create_demand():
             db.session.add(demand)
         
         db.session.commit()
-        flash('Demand(s) created successfully!', 'success')
+        
+        # Send email notifications (non-blocking - don't fail request if emails fail)
+        email_errors = []
+        for demand in SparePartsDemand.query.filter_by(requestor_id=session['user_id']).order_by(SparePartsDemand.created_at.desc()).limit(len(materials_data)):
+            try:
+                # Send notification to supervisor if assigned, otherwise to stock agents
+                if demand.supervisor_id:
+                    supervisor = User.query.get(demand.supervisor_id)
+                    if supervisor:
+                        EmailService.send_supervisor_approval_request(demand, supervisor)
+                else:
+                    # Send notification to all stock agents
+                    stock_agents = User.query.filter_by(role='stock_agent').all()
+                    for stock_agent in stock_agents:
+                        EmailService.send_stock_agent_notification(demand, stock_agent)
+            except Exception as e:
+                email_errors.append(f"Failed to send emails for {demand.demand_number}: {str(e)}")
+                current_app.logger.error(f"Email error for demand {demand.demand_number}: {str(e)}")
+        
+        success_msg = 'Demand(s) created successfully!'
+        if email_errors:
+            success_msg += ' (Note: Some notification emails could not be sent)'
+            logger.warning(f"Email sending errors: {email_errors}")
+        
+        flash(success_msg, 'success')
         return redirect(url_for('demands.list_demands'))
     
     materials = Material.query.all()
@@ -172,6 +200,16 @@ def supervisor_approve(demand_id):
     demand.demand_status = 'approved_supervisor'
     
     db.session.commit()
+    
+    # Send notifications (non-blocking)
+    try:
+        EmailService.send_supervisor_decision_notification(demand, 'approved', demand.supervisor_notes)
+        stock_agents = User.query.filter_by(role='stock_agent').all()
+        for stock_agent in stock_agents:
+            EmailService.send_stock_agent_notification(demand, stock_agent)
+    except Exception as e:
+        logger.warning(f"Failed to send approval emails for demand {demand.demand_number}: {str(e)}")
+    
     flash('Demand approved by supervisor!', 'success')
     return redirect(url_for('demands.detail', demand_id=demand_id))
 
@@ -198,6 +236,13 @@ def supervisor_reject(demand_id):
     demand.demand_status = 'rejected'
     
     db.session.commit()
+    
+    # Send rejection notification (non-blocking)
+    try:
+        EmailService.send_supervisor_decision_notification(demand, 'rejected', demand.supervisor_notes)
+    except Exception as e:
+        logger.warning(f"Failed to send rejection email for demand {demand.demand_number}: {str(e)}")
+    
     flash('Demand rejected by supervisor.', 'warning')
     return redirect(url_for('demands.detail', demand_id=demand_id))
 
@@ -279,6 +324,13 @@ def stock_agent_approve(demand_id):
     demand.fulfilled_date = datetime.utcnow()
     
     db.session.commit()
+    
+    # Send allocation notification (non-blocking)
+    try:
+        EmailService.send_allocation_notification(demand, demand.requestor)
+    except Exception as e:
+        logger.warning(f"Failed to send allocation email for demand {demand.demand_number}: {str(e)}")
+    
     flash(f'Demand approved. {quantity_allocated} units allocated and sent to technician.', 'success')
     return redirect(url_for('demands.detail', demand_id=demand_id))
 
@@ -308,15 +360,12 @@ def stock_agent_reject(demand_id):
     demand.demand_status = 'rejected'
     
     db.session.commit()
+    
+    # Send rejection notification (non-blocking)
+    try:
+        EmailService.send_supervisor_decision_notification(demand, 'rejected', demand.stock_agent_notes)
+    except Exception as e:
+        logger.warning(f"Failed to send rejection email for demand {demand.demand_number}: {str(e)}")
+    
     flash('Demand rejected by stock agent. Technician has been notified.', 'warning')
-    return redirect(url_for('demands.detail', demand_id=demand_id))
-    
-    demand.stock_agent_id = session['user_id']
-    demand.stock_agent_approval = 'rejected'
-    demand.stock_agent_approval_date = datetime.utcnow()
-    demand.stock_agent_notes = request.form.get('notes', '')
-    demand.demand_status = 'rejected'
-    
-    db.session.commit()
-    flash('Demand rejected by stock agent.', 'warning')
     return redirect(url_for('demands.detail', demand_id=demand_id))

@@ -2,6 +2,7 @@ from flask import Flask
 from config import config
 from app.models import db
 from flask_session import Session
+from flask_mail import Mail
 from datetime import timedelta
 import os
 
@@ -20,6 +21,10 @@ def create_app(config_name='development'):
     # Initialize extensions
     db.init_app(app)
     Session(app)
+    
+    # Initialize Flask-Mail
+    from app.email_service import mail
+    mail.init_app(app)
     
     # Register blueprints
     from app.routes.auth import auth_bp
