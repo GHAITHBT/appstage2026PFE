@@ -44,9 +44,8 @@ class Config:
     # Company Information
     COMPANY_NAME = 'Sumitomo Wiring Systems'
     COMPANY_LOGO = 'images/logo.png'
-    # Logo URL for emails - update with your GitHub raw URL after pushing to GitHub
-    # Format: https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/app/static/images/logo.png
-    LOGO_URL = 'https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/app/static/images/logo.png'
+    # Logo URL for emails - hosted on GitHub
+    LOGO_URL = 'https://raw.githubusercontent.com/GHAITHBT/appstage2026PFE/main/app/static/images/logo.png'
 
 class DevelopmentConfig(Config):
     """Development configuration"""
