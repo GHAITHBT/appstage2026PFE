@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """
 Machine Maintenance System - Proteus ISIS Simulation Version
-Matches the exact schematic provided by the user.
+Buzzer driven by manual thread-based toggling (most reliable in Proteus).
 
-HARDWARE MAPPING (from schematic):
+HARDWARE MAPPING:
   LCD (LM016L):
     RS = GPIO4, E = GPIO17
     D4 = GPIO18, D5 = GPIO27, D6 = GPIO22, D7 = GPIO23
@@ -21,22 +21,28 @@ HARDWARE MAPPING (from schematic):
     GPIO16 -> Break LED         (D4)
     GPIO19 -> Material/Cancel   (D5)
 
-  IR Obstacle Sensor: OUT -> GPIO21  (LOW = obstacle / machine working)
+  IR Obstacle Sensor: OUT -> GPIO21
+                      LOW = obstacle (machine working)
 
-  Buzzer (ACTIVE HIGH, sourcing):
-    Buzzer + terminal -> GPIO13
-    Buzzer - terminal -> GND
-    GPIO13 HIGH = buzzer ON, GPIO13 LOW = silent
-    Driven via PWM for clean tone control.
+  Buzzer (set Operating Voltage = 3.3V in Proteus):
+    Buzzer + -> GPIO13
+    Buzzer - -> GND
+
+BEHAVIOR:
+  - When downtime alert triggers: buzzer sounds CONTINUOUSLY (with LEDs flashing)
+  - When user presses any event button (Material/Maint/Break): buzzer stops
+  - Short beep on every button press for feedback
+  - Sensor LOW for >20 seconds with no activity = downtime alert
 """
 
 import RPi.GPIO as GPIO
 import time
 import logging
 import traceback
+import threading
 
 # ============================================================================
-# LCD PIN CONFIGURATION (4-BIT PARALLEL MODE)
+# LCD PIN CONFIGURATION
 # ============================================================================
 LCD_RS = 4
 LCD_E  = 17
@@ -57,33 +63,25 @@ E_DELAY = 0.0005
 # ============================================================================
 # GPIO PIN MAPPING
 # ============================================================================
+LED_DOWNTIME    = 26
+LED_MAINTENANCE = 20
+LED_BREAK       = 16
+LED_MATERIAL    = 19
 
-# LEDs (Outputs, active HIGH)
-LED_DOWNTIME    = 26   # D2
-LED_MAINTENANCE = 20   # D3
-LED_BREAK       = 16   # D4
-LED_MATERIAL    = 19   # D5
-
-# Buttons (Inputs, pulled-up; pressed = LOW)
 BUTTON_MATERIAL    = 5
 BUTTON_MAINTENANCE = 6
 BUTTON_BREAK       = 12
 BUTTON_CANCEL      = 7
 
-# Sensor and Buzzer
 SENSOR_OBSTACLE = 21
 BUZZER_PIN      = 13
 
-# Buzzer PWM settings - matches Proteus BUZZER model's tuned frequency (500 Hz)
-# Passive piezo buzzers only resonate at their specified frequency
-BUZZER_FREQ_HZ  = 500
-BUZZER_DUTY     = 50
+# Buzzer toggle period (1 / (2 * frequency))
+# Proteus BUZZER tuned at 500Hz -> half period = 1ms
+BUZZER_HALF_PERIOD = 0.001
 
-# Downtime threshold (seconds without sensor activity)
 DOWNTIME_THRESHOLD = 20
-
-# Material change duration (seconds)
-MATERIAL_DURATION = 180
+MATERIAL_DURATION  = 180
 
 # ============================================================================
 # LOGGING
@@ -108,7 +106,60 @@ last_sensor_active = time.time()
 event_start_time = None
 material_start_time = None
 lcd_ready = False
-buzzer_pwm = None
+
+# Buzzer control: set buzzer_active = True to make it sound continuously
+buzzer_active = False
+buzzer_thread_stop = False
+
+# ============================================================================
+# BUZZER THREAD - manual high-speed toggling
+# ============================================================================
+
+def buzzer_worker():
+    """
+    Background thread that toggles GPIO13 at ~500Hz whenever buzzer_active=True.
+    This is the most reliable way to drive a passive piezo in Proteus.
+    """
+    global buzzer_thread_stop
+    state_high = False
+    while not buzzer_thread_stop:
+        if buzzer_active:
+            state_high = not state_high
+            try:
+                GPIO.output(BUZZER_PIN, GPIO.HIGH if state_high else GPIO.LOW)
+            except Exception:
+                pass
+            time.sleep(BUZZER_HALF_PERIOD)
+        else:
+            # Make sure the pin stays LOW (silent) when not active
+            if state_high:
+                try:
+                    GPIO.output(BUZZER_PIN, GPIO.LOW)
+                except Exception:
+                    pass
+                state_high = False
+            time.sleep(0.01)
+    # Cleanup on exit
+    try:
+        GPIO.output(BUZZER_PIN, GPIO.LOW)
+    except Exception:
+        pass
+
+def buzzer_on():
+    """Start continuous buzzing"""
+    global buzzer_active
+    buzzer_active = True
+
+def buzzer_off():
+    """Stop buzzing"""
+    global buzzer_active
+    buzzer_active = False
+
+def beep(duration=0.1):
+    """Short beep for button feedback"""
+    buzzer_on()
+    time.sleep(duration)
+    buzzer_off()
 
 # ============================================================================
 # LCD FUNCTIONS
@@ -130,7 +181,6 @@ def lcd_init():
     except Exception as e:
         lcd_ready = False
         logger.error(f"LCD init failed: {e}")
-        print(f"[LCD] Init failed: {e}")
 
 def lcd_byte(bits, mode):
     GPIO.output(LCD_RS, mode)
@@ -170,8 +220,6 @@ def lcd_show(line1, line2=""):
 # ============================================================================
 
 def setup_gpio():
-    global buzzer_pwm
-
     GPIO.setwarnings(False)
     GPIO.setmode(GPIO.BCM)
 
@@ -188,17 +236,15 @@ def setup_gpio():
 
     GPIO.setup(SENSOR_OBSTACLE, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-    # Buzzer ACTIVE HIGH: idle LOW = silent
+    # Buzzer: simple OUT pin, no PWM - thread will toggle it
     GPIO.setup(BUZZER_PIN, GPIO.OUT)
     GPIO.output(BUZZER_PIN, GPIO.LOW)
-    buzzer_pwm = GPIO.PWM(BUZZER_PIN, BUZZER_FREQ_HZ)
-    buzzer_pwm.start(0)   # 0% duty = silent
 
     time.sleep(0.05)
     lcd_init()
 
     logger.info("GPIO configured")
-    print("[INIT] GPIO configured (buzzer = PWM, active HIGH)")
+    print("[INIT] GPIO configured")
 
 def all_leds_off():
     GPIO.output(LED_DOWNTIME,    GPIO.LOW)
@@ -212,28 +258,12 @@ def all_leds_on():
     GPIO.output(LED_BREAK,       GPIO.HIGH)
     GPIO.output(LED_MATERIAL,    GPIO.HIGH)
 
-def buzz(duration=0.1, freq=BUZZER_FREQ_HZ):
-    """Sound the buzzer at `freq` Hz for `duration` seconds (active HIGH PWM)"""
-    if buzzer_pwm is None:
-        return
-    try:
-        buzzer_pwm.ChangeFrequency(freq)
-        buzzer_pwm.ChangeDutyCycle(BUZZER_DUTY)
-        time.sleep(duration)
-        buzzer_pwm.ChangeDutyCycle(0)
-        # Park LOW so buzzer is fully silent
-        GPIO.output(BUZZER_PIN, GPIO.LOW)
-    except Exception as e:
-        logger.error(f"Buzzer error: {e}")
-
 def startup_test():
     print("[TEST] Startup self-test")
     lcd_show("Self Test...", "LEDs + Buzzer")
     all_leds_on()
-    buzz(0.4)
-    time.sleep(0.2)
-    buzz(0.4)
-    time.sleep(0.5)
+    beep(0.6)
+    time.sleep(0.4)
     all_leds_off()
     time.sleep(0.3)
 
@@ -248,18 +278,18 @@ def go_working():
     material_start_time = None
     last_sensor_active = time.time()
     all_leds_off()
+    buzzer_off()
     lcd_show(TEAM_NAME[:16], "Working...")
     logger.info("State -> working")
 
 def trigger_downtime_alert():
+    """Continuous buzzer + flashing LEDs until user picks an event"""
     global state
     state = "downtime_alert"
     all_leds_on()
     lcd_show("Downtime Alert!", "Choose event")
-    for _ in range(3):
-        buzz(0.15)
-        time.sleep(0.1)
-    logger.info("State -> downtime_alert")
+    buzzer_on()    # CONTINUOUS sound until user responds
+    logger.info("State -> downtime_alert (buzzer ON)")
 
 def start_event(name, led_pin, line1, line2):
     global state, event_start_time
@@ -267,8 +297,9 @@ def start_event(name, led_pin, line1, line2):
     event_start_time = time.time()
     all_leds_off()
     GPIO.output(led_pin, GPIO.HIGH)
+    buzzer_off()   # Stop the alarm
     lcd_show(line1, line2)
-    buzz(0.1)
+    beep(0.1)      # Short confirmation beep
     logger.info(f"State -> {name}")
 
 def end_event(reason="ended"):
@@ -285,8 +316,9 @@ def start_material_change():
     material_start_time = time.time()
     all_leds_off()
     GPIO.output(LED_MATERIAL, GPIO.HIGH)
+    buzzer_off()
     lcd_show("Material Change", f"Time: {MATERIAL_DURATION}s")
-    buzz(0.1)
+    beep(0.1)
     logger.info("State -> material_change")
 
 # ============================================================================
@@ -338,8 +370,6 @@ def main_loop():
             if remaining != last_countdown and remaining >= 0:
                 lcd_show("Material Change", f"Time: {remaining}s")
                 last_countdown = remaining
-                if remaining <= 10 and remaining > 0:
-                    buzz(0.05)
             if elapsed > MATERIAL_DURATION:
                 logger.info("Material change timed out -> downtime alert")
                 trigger_downtime_alert()
@@ -348,9 +378,10 @@ def main_loop():
             lcd_show(TEAM_NAME[:16], "Working...")
             last_idle_repaint = now
 
+        # ---- Buttons (each press: short beep, then handle event) ----
+
         # Material button (GPIO5)
         if prev_mat == GPIO.HIGH and b_mat == GPIO.LOW:
-            buzz(0.08)
             print("[BTN] Material pressed")
             if state in ("working", "downtime_alert"):
                 if state == "downtime_alert":
@@ -365,7 +396,6 @@ def main_loop():
 
         # Maintenance button (GPIO6)
         if prev_maint == GPIO.HIGH and b_maint == GPIO.LOW:
-            buzz(0.08)
             print("[BTN] Maintenance pressed")
             if state in ("working", "downtime_alert"):
                 start_event("maintenance", LED_MAINTENANCE,
@@ -379,7 +409,6 @@ def main_loop():
 
         # Break button (GPIO12)
         if prev_brk == GPIO.HIGH and b_brk == GPIO.LOW:
-            buzz(0.08)
             print("[BTN] Break pressed")
             if state in ("working", "downtime_alert"):
                 start_event("break", LED_BREAK,
@@ -393,11 +422,12 @@ def main_loop():
 
         # Cancel button (GPIO7)
         if prev_can == GPIO.HIGH and b_can == GPIO.LOW:
-            buzz(0.2)
             print("[BTN] Cancel pressed")
             if state != "working":
+                buzzer_off()
                 lcd_show("Event", "Cancelled")
-                time.sleep(0.6)
+                beep(0.2)
+                time.sleep(0.4)
                 end_event("cancelled")
 
         prev_mat   = b_mat
@@ -412,19 +442,25 @@ def main_loop():
 # ============================================================================
 
 def main():
+    global buzzer_thread_stop
+    buzzer_t = None
     try:
         print("=" * 50)
         print("MACHINE MAINTENANCE SYSTEM - PROTEUS SIM")
         print("=" * 50)
         GPIO.cleanup()
         setup_gpio()
+
+        # Start buzzer toggle thread
+        buzzer_t = threading.Thread(target=buzzer_worker, daemon=True)
+        buzzer_t.start()
+
         startup_test()
 
         print("LCD: RS=4 E=17 D4=18 D5=27 D6=22 D7=23")
         print("Buttons: GPIO5=Mat  GPIO6=Maint  GPIO12=Break  GPIO7=Cancel")
         print("LEDs:    GPIO26=DT  GPIO20=Maint GPIO16=Break  GPIO19=Mat")
-        print(f"Sensor:  GPIO21    Buzzer: GPIO13 -> + , GND -> -")
-        print(f"Buzzer:  PWM @ {BUZZER_FREQ_HZ} Hz, ACTIVE HIGH (3.3V)")
+        print("Sensor:  GPIO21    Buzzer: GPIO13 (manual toggle ~500Hz)")
         print("=" * 50)
 
         main_loop()
@@ -435,16 +471,15 @@ def main():
         logger.error(f"Fatal: {e}\n{traceback.format_exc()}")
         print(f"[ERROR] {e}")
     finally:
+        buzzer_thread_stop = True
+        buzzer_off()
+        if buzzer_t is not None:
+            buzzer_t.join(timeout=0.5)
         try:
             lcd_show("Goodbye!", "")
         except Exception:
             pass
-        try:
-            if buzzer_pwm is not None:
-                buzzer_pwm.stop()
-        except Exception:
-            pass
-        GPIO.output(BUZZER_PIN, GPIO.LOW)  # park LOW = silent
+        GPIO.output(BUZZER_PIN, GPIO.LOW)
         all_leds_off()
         GPIO.cleanup()
         print("[SHUTDOWN] Done")
