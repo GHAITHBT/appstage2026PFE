@@ -80,7 +80,7 @@ BUTTON_CANCEL      = 7
 SENSOR_OBSTACLE = 21
 BUZZER_PIN      = 13
 
-DOWNTIME_THRESHOLD = 20
+DOWNTIME_THRESHOLD = 5
 MATERIAL_DURATION  = 180
 
 # ============================================================================
@@ -299,10 +299,14 @@ def main_loop():
     prev_brk   = GPIO.HIGH
     prev_can   = GPIO.HIGH
 
+    # Sensor edge tracking
+    prev_sensor       = GPIO.HIGH
+    sensor_ok_until   = 0     # show "Sensor: OK" on LCD until this timestamp
+    last_idle_lcd     = 0     # last time we updated the idle LCD line
+
     last_flash       = time.time()
     flash_on         = False
     last_countdown   = 0
-    last_idle_repaint = time.time()
 
     while True:
         now = time.time()
@@ -313,12 +317,27 @@ def main_loop():
         b_brk     = GPIO.input(BUTTON_BREAK)
         b_can     = GPIO.input(BUTTON_CANCEL)
 
+        # ---- Sensor edge detection ----
+        # IR module: LOW = obstacle detected (machine producing parts)
         if sensor == GPIO.LOW:
             last_sensor_active = now
+            # On the falling edge (HIGH -> LOW), flash "Sensor: OK" on LCD
+            if prev_sensor == GPIO.HIGH:
+                print(f"[SENSOR] Triggered at t={now:.1f}")
+                if state == "working":
+                    sensor_ok_until = now + 1.0   # show msg for 1 second
+                    lcd_show(TEAM_NAME[:16], "Sensor: OK")
+                    last_idle_lcd = now
+        elif prev_sensor == GPIO.LOW and sensor == GPIO.HIGH:
+            # Rising edge: obstacle gone
+            print(f"[SENSOR] Cleared at t={now:.1f}")
+        prev_sensor = sensor
 
+        # ---- Downtime detection ----
         if state == "working" and (now - last_sensor_active) > DOWNTIME_THRESHOLD:
             trigger_downtime_alert()
 
+        # ---- Flash LEDs while in downtime alert ----
         if state == "downtime_alert" and (now - last_flash) >= 0.3:
             flash_on = not flash_on
             if flash_on:
@@ -327,6 +346,7 @@ def main_loop():
                 all_leds_off()
             last_flash = now
 
+        # ---- Material change countdown + timeout ----
         if state == "material_change":
             elapsed = now - material_start_time
             remaining = int(MATERIAL_DURATION - elapsed)
@@ -337,9 +357,12 @@ def main_loop():
                 logger.info("Material change timed out -> downtime alert")
                 trigger_downtime_alert()
 
-        if state == "working" and (now - last_idle_repaint) > 5:
-            lcd_show(TEAM_NAME[:16], "Working...")
-            last_idle_repaint = now
+        # ---- Idle LCD: show seconds since last sensor activity ----
+        if state == "working" and now > sensor_ok_until:
+            if (now - last_idle_lcd) >= 1.0:
+                idle_secs = int(now - last_sensor_active)
+                lcd_show(TEAM_NAME[:16], f"Idle: {idle_secs}s")
+                last_idle_lcd = now
 
         # Material button (GPIO5)
         if prev_mat == GPIO.HIGH and b_mat == GPIO.LOW:
