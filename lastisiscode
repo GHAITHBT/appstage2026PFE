@@ -1,0 +1,451 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Machine Maintenance System - Proteus ISIS Simulation Version
+Matches the exact schematic provided by the user.
+
+HARDWARE MAPPING (from schematic):
+  LCD (LM016L):
+    RS = GPIO4, E = GPIO17
+    D4 = GPIO18, D5 = GPIO27, D6 = GPIO22, D7 = GPIO23
+
+  Buttons (active LOW, pulled up):
+    GPIO5  -> Material Change
+    GPIO6  -> Maintenance
+    GPIO12 -> Break
+    GPIO7  -> Cancel
+
+  LEDs (active HIGH):
+    GPIO28 -> Downtime LED      (D2)
+    GPIO20 -> Maintenance LED   (D3)
+    GPIO16 -> Break LED         (D4)
+    GPIO19 -> Material/Cancel   (D5)
+
+  IR Obstacle Sensor: OUT -> GPIO21  (LOW = obstacle / machine working)
+  Buzzer:             GPIO13         (active HIGH)
+"""
+
+import RPi.GPIO as GPIO
+import time
+import logging
+import traceback
+
+# ============================================================================
+# LCD PIN CONFIGURATION (4-BIT PARALLEL MODE)
+# ============================================================================
+LCD_RS = 4
+LCD_E  = 17
+LCD_D4 = 18
+LCD_D5 = 27
+LCD_D6 = 22
+LCD_D7 = 23
+
+LCD_WIDTH = 16
+LCD_CHR = True
+LCD_CMD = False
+LCD_LINE_1 = 0x80
+LCD_LINE_2 = 0xC0
+
+E_PULSE = 0.0005
+E_DELAY = 0.0005
+
+# ============================================================================
+# GPIO PIN MAPPING (matches Proteus schematic)
+# ============================================================================
+
+# LEDs (Outputs)
+LED_DOWNTIME    = 28   # D2  - Proteus exposes GPIO28
+LED_MAINTENANCE = 20   # D3
+LED_BREAK       = 16   # D4
+LED_MATERIAL    = 19   # D5  (also used as cancel/material indicator)
+
+# Buttons (Inputs, pulled-up; pressed = LOW)
+BUTTON_MATERIAL    = 5
+BUTTON_MAINTENANCE = 6
+BUTTON_BREAK       = 12
+BUTTON_CANCEL      = 7
+
+# Sensor and Buzzer
+SENSOR_OBSTACLE = 21
+BUZZER_PIN      = 13
+
+# Downtime threshold (seconds without sensor activity)
+DOWNTIME_THRESHOLD = 20
+
+# Material change duration (seconds)
+MATERIAL_DURATION = 180
+
+# ============================================================================
+# LOGGING
+# ============================================================================
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('button_log.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# GLOBAL STATE
+# ============================================================================
+TEAM_NAME = "RPI_MACHINE_01"
+
+# State machine: "working", "downtime_alert", "downtime", "maintenance",
+#                "break", "material_change"
+state = "working"
+last_sensor_active = time.time()
+event_start_time = None
+material_start_time = None
+lcd_ready = False
+
+# ============================================================================
+# LCD FUNCTIONS
+# ============================================================================
+
+def lcd_init():
+    """Initialize the HD44780 LCD in 4-bit mode"""
+    global lcd_ready
+    try:
+        lcd_byte(0x33, LCD_CMD)
+        lcd_byte(0x32, LCD_CMD)
+        lcd_byte(0x06, LCD_CMD)
+        lcd_byte(0x0C, LCD_CMD)
+        lcd_byte(0x28, LCD_CMD)
+        lcd_byte(0x01, LCD_CMD)
+        time.sleep(E_DELAY)
+        lcd_ready = True
+        logger.info("LCD initialized")
+        print("[LCD] Initialized OK")
+    except Exception as e:
+        lcd_ready = False
+        logger.error(f"LCD init failed: {e}")
+        print(f"[LCD] Init failed: {e}")
+
+def lcd_byte(bits, mode):
+    """Send a byte to the LCD in two 4-bit nibbles"""
+    GPIO.output(LCD_RS, mode)
+
+    # High nibble
+    GPIO.output(LCD_D4, bool(bits & 0x10))
+    GPIO.output(LCD_D5, bool(bits & 0x20))
+    GPIO.output(LCD_D6, bool(bits & 0x40))
+    GPIO.output(LCD_D7, bool(bits & 0x80))
+    lcd_toggle_enable()
+
+    # Low nibble
+    GPIO.output(LCD_D4, bool(bits & 0x01))
+    GPIO.output(LCD_D5, bool(bits & 0x02))
+    GPIO.output(LCD_D6, bool(bits & 0x04))
+    GPIO.output(LCD_D7, bool(bits & 0x08))
+    lcd_toggle_enable()
+
+def lcd_toggle_enable():
+    """Pulse the LCD enable pin"""
+    time.sleep(E_DELAY)
+    GPIO.output(LCD_E, True)
+    time.sleep(E_PULSE)
+    GPIO.output(LCD_E, False)
+    time.sleep(E_DELAY)
+
+def lcd_string(message, line):
+    """Write a single line of text to the LCD"""
+    if not lcd_ready:
+        return
+    message = message.ljust(LCD_WIDTH, " ")[:LCD_WIDTH]
+    lcd_byte(line, LCD_CMD)
+    for ch in message:
+        lcd_byte(ord(ch), LCD_CHR)
+
+def lcd_show(line1, line2=""):
+    """Show two lines of text on the LCD"""
+    lcd_string(line1, LCD_LINE_1)
+    lcd_string(line2, LCD_LINE_2)
+    print(f"[LCD] {line1:<16} | {line2}")
+
+# ============================================================================
+# GPIO SETUP
+# ============================================================================
+
+def setup_gpio():
+    """Configure all GPIO pins"""
+    GPIO.setwarnings(False)
+    GPIO.setmode(GPIO.BCM)
+
+    # LCD pins
+    for pin in (LCD_RS, LCD_E, LCD_D4, LCD_D5, LCD_D6, LCD_D7):
+        GPIO.setup(pin, GPIO.OUT)
+        GPIO.output(pin, GPIO.LOW)
+
+    # LEDs
+    for pin in (LED_DOWNTIME, LED_MAINTENANCE, LED_BREAK, LED_MATERIAL):
+        GPIO.setup(pin, GPIO.OUT)
+        GPIO.output(pin, GPIO.LOW)
+
+    # Buttons (pull-up, pressed = LOW)
+    for pin in (BUTTON_MATERIAL, BUTTON_MAINTENANCE, BUTTON_BREAK, BUTTON_CANCEL):
+        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+    # Sensor and buzzer
+    GPIO.setup(SENSOR_OBSTACLE, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    GPIO.setup(BUZZER_PIN, GPIO.OUT)
+    GPIO.output(BUZZER_PIN, GPIO.LOW)
+
+    # Settle delay before LCD init (important for Proteus)
+    time.sleep(0.05)
+    lcd_init()
+
+    logger.info("GPIO configured")
+    print("[INIT] GPIO configured")
+
+def all_leds_off():
+    """Turn all event LEDs off"""
+    GPIO.output(LED_DOWNTIME,    GPIO.LOW)
+    GPIO.output(LED_MAINTENANCE, GPIO.LOW)
+    GPIO.output(LED_BREAK,       GPIO.LOW)
+    GPIO.output(LED_MATERIAL,    GPIO.LOW)
+
+def all_leds_on():
+    """Turn all event LEDs on (used for downtime alert)"""
+    GPIO.output(LED_DOWNTIME,    GPIO.HIGH)
+    GPIO.output(LED_MAINTENANCE, GPIO.HIGH)
+    GPIO.output(LED_BREAK,       GPIO.HIGH)
+    GPIO.output(LED_MATERIAL,    GPIO.HIGH)
+
+def buzz(duration=0.1):
+    """Sound the buzzer for the given duration (seconds)"""
+    GPIO.output(BUZZER_PIN, GPIO.HIGH)
+    time.sleep(duration)
+    GPIO.output(BUZZER_PIN, GPIO.LOW)
+
+def startup_test():
+    """Brief LED + buzzer + LCD test to confirm wiring"""
+    print("[TEST] Startup self-test")
+    lcd_show("Self Test...", "LEDs + Buzzer")
+    all_leds_on()
+    buzz(0.3)
+    time.sleep(1.0)
+    all_leds_off()
+    time.sleep(0.3)
+
+# ============================================================================
+# STATE TRANSITIONS
+# ============================================================================
+
+def go_working():
+    """Return to normal working state"""
+    global state, event_start_time, material_start_time, last_sensor_active
+    state = "working"
+    event_start_time = None
+    material_start_time = None
+    last_sensor_active = time.time()
+    all_leds_off()
+    lcd_show(TEAM_NAME[:16], "Working...")
+    logger.info("State -> working")
+
+def trigger_downtime_alert():
+    """Sensor inactive too long -> alert operator to choose event"""
+    global state
+    state = "downtime_alert"
+    all_leds_on()
+    lcd_show("Downtime Alert!", "Choose event")
+    buzz(0.5)
+    logger.info("State -> downtime_alert")
+
+def start_event(name, led_pin, line1, line2):
+    """Start a logged event and light its LED"""
+    global state, event_start_time
+    state = name
+    event_start_time = time.time()
+    all_leds_off()
+    GPIO.output(led_pin, GPIO.HIGH)
+    lcd_show(line1, line2)
+    buzz(0.1)
+    logger.info(f"State -> {name}")
+
+def end_event(reason="ended"):
+    """End the current event and log its duration"""
+    global event_start_time
+    if event_start_time:
+        duration = time.time() - event_start_time
+        logger.info(f"Event {state} {reason} after {duration:.1f}s")
+        print(f"[EVENT] {state.upper()} {reason} ({duration:.1f}s)")
+    go_working()
+
+def start_material_change():
+    """Begin the 180-second material change countdown"""
+    global state, material_start_time
+    state = "material_change"
+    material_start_time = time.time()
+    all_leds_off()
+    GPIO.output(LED_MATERIAL, GPIO.HIGH)
+    lcd_show("Material Change", f"Time: {MATERIAL_DURATION}s")
+    buzz(0.1)
+    logger.info("State -> material_change")
+
+# ============================================================================
+# MAIN LOOP
+# ============================================================================
+
+def main_loop():
+    """Poll buttons, sensor, and timers; update LCD and LEDs in real time"""
+    global last_sensor_active, state
+
+    print("[MONITOR] Running. Press Ctrl+C to stop.")
+    go_working()
+
+    # Previous button states for edge detection
+    prev_mat   = GPIO.HIGH
+    prev_maint = GPIO.HIGH
+    prev_brk   = GPIO.HIGH
+    prev_can   = GPIO.HIGH
+
+    last_flash       = time.time()
+    flash_on         = False
+    last_countdown   = 0
+    last_idle_repaint = time.time()
+
+    while True:
+        now = time.time()
+
+        # ---- Read inputs ----
+        sensor    = GPIO.input(SENSOR_OBSTACLE)
+        b_mat     = GPIO.input(BUTTON_MATERIAL)
+        b_maint   = GPIO.input(BUTTON_MAINTENANCE)
+        b_brk     = GPIO.input(BUTTON_BREAK)
+        b_can     = GPIO.input(BUTTON_CANCEL)
+
+        # IR module: LOW = obstacle detected (machine producing)
+        if sensor == GPIO.LOW:
+            last_sensor_active = now
+
+        # ---- Downtime detection ----
+        if state == "working" and (now - last_sensor_active) > DOWNTIME_THRESHOLD:
+            trigger_downtime_alert()
+
+        # ---- Flash LEDs while in downtime alert ----
+        if state == "downtime_alert" and (now - last_flash) >= 0.3:
+            flash_on = not flash_on
+            if flash_on:
+                all_leds_on()
+            else:
+                all_leds_off()
+            last_flash = now
+
+        # ---- Material change countdown + timeout ----
+        if state == "material_change":
+            elapsed = now - material_start_time
+            remaining = int(MATERIAL_DURATION - elapsed)
+            if remaining != last_countdown and remaining >= 0:
+                lcd_show("Material Change", f"Time: {remaining}s")
+                last_countdown = remaining
+            if elapsed > MATERIAL_DURATION:
+                logger.info("Material change timed out -> downtime alert")
+                trigger_downtime_alert()
+
+        # ---- Periodic LCD repaint while idle (helps Proteus repaint) ----
+        if state == "working" and (now - last_idle_repaint) > 5:
+            lcd_show(TEAM_NAME[:16], "Working...")
+            last_idle_repaint = now
+
+        # ---- Button: MATERIAL CHANGE (GPIO5) ----
+        if prev_mat == GPIO.HIGH and b_mat == GPIO.LOW:
+            buzz(0.05)
+            print("[BTN] Material pressed")
+            if state in ("working", "downtime_alert"):
+                if state == "downtime_alert":
+                    # operator chose downtime->material as the cause
+                    start_event("downtime", LED_DOWNTIME,
+                                "Downtime", "Material related")
+                    time.sleep(0.4)
+                start_material_change()
+            elif state == "material_change":
+                end_event("stopped early")
+            else:
+                end_event("ended")
+
+        # ---- Button: MAINTENANCE (GPIO6) ----
+        if prev_maint == GPIO.HIGH and b_maint == GPIO.LOW:
+            buzz(0.05)
+            print("[BTN] Maintenance pressed")
+            if state in ("working", "downtime_alert"):
+                start_event("maintenance", LED_MAINTENANCE,
+                            "Maintenance", "In progress...")
+            elif state == "maintenance":
+                end_event("ended")
+            else:
+                end_event("ended")
+                start_event("maintenance", LED_MAINTENANCE,
+                            "Maintenance", "In progress...")
+
+        # ---- Button: BREAK (GPIO12) ----
+        if prev_brk == GPIO.HIGH and b_brk == GPIO.LOW:
+            buzz(0.05)
+            print("[BTN] Break pressed")
+            if state in ("working", "downtime_alert"):
+                start_event("break", LED_BREAK,
+                            "Break", "On break...")
+            elif state == "break":
+                end_event("ended")
+            else:
+                end_event("ended")
+                start_event("break", LED_BREAK,
+                            "Break", "On break...")
+
+        # ---- Button: CANCEL (GPIO7) ----
+        if prev_can == GPIO.HIGH and b_can == GPIO.LOW:
+            buzz(0.15)
+            print("[BTN] Cancel pressed")
+            if state != "working":
+                lcd_show("Event", "Cancelled")
+                time.sleep(0.6)
+                end_event("cancelled")
+
+        # ---- Save previous button states ----
+        prev_mat   = b_mat
+        prev_maint = b_maint
+        prev_brk   = b_brk
+        prev_can   = b_can
+
+        time.sleep(0.02)
+
+# ============================================================================
+# ENTRY POINT
+# ============================================================================
+
+def main():
+    try:
+        print("=" * 50)
+        print("MACHINE MAINTENANCE SYSTEM - PROTEUS SIM")
+        print("=" * 50)
+        GPIO.cleanup()
+        setup_gpio()
+        startup_test()
+
+        print("LCD: RS=4 E=17 D4=18 D5=27 D6=22 D7=23")
+        print("Buttons: GPIO5=Mat  GPIO6=Maint  GPIO12=Break  GPIO7=Cancel")
+        print("LEDs:    GPIO28=DT  GPIO20=Maint GPIO16=Break  GPIO19=Mat")
+        print("Sensor:  GPIO21    Buzzer: GPIO13")
+        print("=" * 50)
+
+        main_loop()
+
+    except KeyboardInterrupt:
+        print("\n[STOP] Interrupted by user")
+    except Exception as e:
+        logger.error(f"Fatal: {e}\n{traceback.format_exc()}")
+        print(f"[ERROR] {e}")
+    finally:
+        try:
+            lcd_show("Goodbye!", "")
+        except Exception:
+            pass
+        GPIO.output(BUZZER_PIN, GPIO.LOW)
+        all_leds_off()
+        GPIO.cleanup()
+        print("[SHUTDOWN] Done")
+
+if __name__ == "__main__":
+    main()
