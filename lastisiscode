@@ -23,11 +23,11 @@ HARDWARE MAPPING (from schematic):
 
   IR Obstacle Sensor: OUT -> GPIO21  (LOW = obstacle / machine working)
 
-  Buzzer:  GPIO13 driven with PWM (~2 kHz square wave)
-           Buzzer + terminal -> +5V
-           Buzzer - terminal -> GPIO13
-           PWM toggling provides AC drive that the buzzer responds to
-           even when steady-state sinking is too weak in simulation.
+  Buzzer (ACTIVE HIGH, sourcing):
+    Buzzer + terminal -> GPIO13
+    Buzzer - terminal -> GND
+    GPIO13 HIGH = buzzer ON, GPIO13 LOW = silent
+    Driven via PWM for clean tone control.
 """
 
 import RPi.GPIO as GPIO
@@ -75,8 +75,8 @@ SENSOR_OBSTACLE = 21
 BUZZER_PIN      = 13
 
 # Buzzer PWM settings
-BUZZER_FREQ_HZ  = 2000   # 2 kHz tone (audible piezo range)
-BUZZER_DUTY     = 50     # 50% duty cycle for square wave
+BUZZER_FREQ_HZ  = 2000
+BUZZER_DUTY     = 50
 
 # Downtime threshold (seconds without sensor activity)
 DOWNTIME_THRESHOLD = 20
@@ -107,7 +107,7 @@ last_sensor_active = time.time()
 event_start_time = None
 material_start_time = None
 lcd_ready = False
-buzzer_pwm = None   # PWM object, set up in setup_gpio()
+buzzer_pwm = None
 
 # ============================================================================
 # LCD FUNCTIONS
@@ -187,17 +187,17 @@ def setup_gpio():
 
     GPIO.setup(SENSOR_OBSTACLE, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-    # Buzzer: PWM driven, default OFF
+    # Buzzer ACTIVE HIGH: idle LOW = silent
     GPIO.setup(BUZZER_PIN, GPIO.OUT)
-    GPIO.output(BUZZER_PIN, GPIO.HIGH)   # idle HIGH so no current flows
+    GPIO.output(BUZZER_PIN, GPIO.LOW)
     buzzer_pwm = GPIO.PWM(BUZZER_PIN, BUZZER_FREQ_HZ)
-    buzzer_pwm.start(0)                  # 0% duty = silent
+    buzzer_pwm.start(0)   # 0% duty = silent
 
     time.sleep(0.05)
     lcd_init()
 
     logger.info("GPIO configured")
-    print("[INIT] GPIO configured (buzzer = PWM)")
+    print("[INIT] GPIO configured (buzzer = PWM, active HIGH)")
 
 def all_leds_off():
     GPIO.output(LED_DOWNTIME,    GPIO.LOW)
@@ -212,10 +212,7 @@ def all_leds_on():
     GPIO.output(LED_MATERIAL,    GPIO.HIGH)
 
 def buzz(duration=0.1, freq=BUZZER_FREQ_HZ):
-    """
-    Sound the buzzer for `duration` seconds at `freq` Hz using PWM.
-    Works in Proteus where steady-state pin sinking is too weak.
-    """
+    """Sound the buzzer at `freq` Hz for `duration` seconds (active HIGH PWM)"""
     if buzzer_pwm is None:
         return
     try:
@@ -223,8 +220,8 @@ def buzz(duration=0.1, freq=BUZZER_FREQ_HZ):
         buzzer_pwm.ChangeDutyCycle(BUZZER_DUTY)
         time.sleep(duration)
         buzzer_pwm.ChangeDutyCycle(0)
-        # Park the pin HIGH to ensure no current flows when idle
-        GPIO.output(BUZZER_PIN, GPIO.HIGH)
+        # Park LOW so buzzer is fully silent
+        GPIO.output(BUZZER_PIN, GPIO.LOW)
     except Exception as e:
         logger.error(f"Buzzer error: {e}")
 
@@ -233,7 +230,7 @@ def startup_test():
     lcd_show("Self Test...", "LEDs + Buzzer")
     all_leds_on()
     buzz(0.4, freq=2000)
-    time.sleep(0.3)
+    time.sleep(0.2)
     buzz(0.4, freq=1500)
     time.sleep(0.5)
     all_leds_off()
@@ -258,7 +255,6 @@ def trigger_downtime_alert():
     state = "downtime_alert"
     all_leds_on()
     lcd_show("Downtime Alert!", "Choose event")
-    # 3 short beeps for attention
     for _ in range(3):
         buzz(0.15, freq=2500)
         time.sleep(0.1)
@@ -341,7 +337,6 @@ def main_loop():
             if remaining != last_countdown and remaining >= 0:
                 lcd_show("Material Change", f"Time: {remaining}s")
                 last_countdown = remaining
-                # Last 10 seconds: tick beep each second
                 if remaining <= 10 and remaining > 0:
                     buzz(0.05, freq=3000)
             if elapsed > MATERIAL_DURATION:
@@ -427,7 +422,8 @@ def main():
         print("LCD: RS=4 E=17 D4=18 D5=27 D6=22 D7=23")
         print("Buttons: GPIO5=Mat  GPIO6=Maint  GPIO12=Break  GPIO7=Cancel")
         print("LEDs:    GPIO26=DT  GPIO20=Maint GPIO16=Break  GPIO19=Mat")
-        print(f"Sensor:  GPIO21    Buzzer: GPIO13 (PWM @ {BUZZER_FREQ_HZ} Hz)")
+        print(f"Sensor:  GPIO21    Buzzer: GPIO13 -> + , GND -> -")
+        print(f"Buzzer:  PWM @ {BUZZER_FREQ_HZ} Hz, ACTIVE HIGH")
         print("=" * 50)
 
         main_loop()
@@ -447,7 +443,7 @@ def main():
                 buzzer_pwm.stop()
         except Exception:
             pass
-        GPIO.output(BUZZER_PIN, GPIO.HIGH)  # park HIGH = silent
+        GPIO.output(BUZZER_PIN, GPIO.LOW)  # park LOW = silent
         all_leds_off()
         GPIO.cleanup()
         print("[SHUTDOWN] Done")
