@@ -2,7 +2,12 @@
 # -*- coding: utf-8 -*-
 """
 Machine Maintenance System - Proteus ISIS Simulation Version
-Buzzer driven by manual thread-based toggling (most reliable in Proteus).
+Final clean version: buzzer driven by simple steady HIGH/LOW on GPIO13.
+
+PROTEUS BUZZER SETTINGS (right-click buzzer -> Edit Component):
+  Operating Voltage : 3.3V
+  Load Resistance   : 1000  (was 12 - that was the issue)
+  Frequency         : 500Hz
 
 HARDWARE MAPPING:
   LCD (LM016L):
@@ -21,25 +26,24 @@ HARDWARE MAPPING:
     GPIO16 -> Break LED         (D4)
     GPIO19 -> Material/Cancel   (D5)
 
-  IR Obstacle Sensor: OUT -> GPIO21
-                      LOW = obstacle (machine working)
+  IR Obstacle Sensor: OUT -> GPIO21 (LOW = obstacle / machine working)
 
-  Buzzer (set Operating Voltage = 3.3V in Proteus):
+  Buzzer (active HIGH, steady):
     Buzzer + -> GPIO13
     Buzzer - -> GND
+    GPIO13 HIGH = constant power = buzzer sounds
+    GPIO13 LOW  = silent
 
 BEHAVIOR:
-  - When downtime alert triggers: buzzer sounds CONTINUOUSLY (with LEDs flashing)
-  - When user presses any event button (Material/Maint/Break): buzzer stops
-  - Short beep on every button press for feedback
-  - Sensor LOW for >20 seconds with no activity = downtime alert
+  - Downtime alert : LEDs flash + buzzer sounds CONTINUOUSLY until user picks
+  - Button press   : short beep for feedback, buzzer alarm stops
+  - Cancel button  : ends current event, returns to working
 """
 
 import RPi.GPIO as GPIO
 import time
 import logging
 import traceback
-import threading
 
 # ============================================================================
 # LCD PIN CONFIGURATION
@@ -76,10 +80,6 @@ BUTTON_CANCEL      = 7
 SENSOR_OBSTACLE = 21
 BUZZER_PIN      = 13
 
-# Buzzer toggle period (1 / (2 * frequency))
-# Proteus BUZZER tuned at 500Hz -> half period = 1ms
-BUZZER_HALF_PERIOD = 0.001
-
 DOWNTIME_THRESHOLD = 20
 MATERIAL_DURATION  = 180
 
@@ -107,53 +107,17 @@ event_start_time = None
 material_start_time = None
 lcd_ready = False
 
-# Buzzer control: set buzzer_active = True to make it sound continuously
-buzzer_active = False
-buzzer_thread_stop = False
-
 # ============================================================================
-# BUZZER THREAD - manual high-speed toggling
+# BUZZER - simple steady HIGH/LOW
 # ============================================================================
-
-def buzzer_worker():
-    """
-    Background thread that toggles GPIO13 at ~500Hz whenever buzzer_active=True.
-    This is the most reliable way to drive a passive piezo in Proteus.
-    """
-    global buzzer_thread_stop
-    state_high = False
-    while not buzzer_thread_stop:
-        if buzzer_active:
-            state_high = not state_high
-            try:
-                GPIO.output(BUZZER_PIN, GPIO.HIGH if state_high else GPIO.LOW)
-            except Exception:
-                pass
-            time.sleep(BUZZER_HALF_PERIOD)
-        else:
-            # Make sure the pin stays LOW (silent) when not active
-            if state_high:
-                try:
-                    GPIO.output(BUZZER_PIN, GPIO.LOW)
-                except Exception:
-                    pass
-                state_high = False
-            time.sleep(0.01)
-    # Cleanup on exit
-    try:
-        GPIO.output(BUZZER_PIN, GPIO.LOW)
-    except Exception:
-        pass
 
 def buzzer_on():
-    """Start continuous buzzing"""
-    global buzzer_active
-    buzzer_active = True
+    """Turn buzzer on with constant power"""
+    GPIO.output(BUZZER_PIN, GPIO.HIGH)
 
 def buzzer_off():
-    """Stop buzzing"""
-    global buzzer_active
-    buzzer_active = False
+    """Turn buzzer off"""
+    GPIO.output(BUZZER_PIN, GPIO.LOW)
 
 def beep(duration=0.1):
     """Short beep for button feedback"""
@@ -236,7 +200,6 @@ def setup_gpio():
 
     GPIO.setup(SENSOR_OBSTACLE, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-    # Buzzer: simple OUT pin, no PWM - thread will toggle it
     GPIO.setup(BUZZER_PIN, GPIO.OUT)
     GPIO.output(BUZZER_PIN, GPIO.LOW)
 
@@ -283,12 +246,12 @@ def go_working():
     logger.info("State -> working")
 
 def trigger_downtime_alert():
-    """Continuous buzzer + flashing LEDs until user picks an event"""
+    """LEDs flash + buzzer sounds continuously until user picks an event"""
     global state
     state = "downtime_alert"
     all_leds_on()
     lcd_show("Downtime Alert!", "Choose event")
-    buzzer_on()    # CONTINUOUS sound until user responds
+    buzzer_on()    # constant HIGH on GPIO13
     logger.info("State -> downtime_alert (buzzer ON)")
 
 def start_event(name, led_pin, line1, line2):
@@ -297,9 +260,9 @@ def start_event(name, led_pin, line1, line2):
     event_start_time = time.time()
     all_leds_off()
     GPIO.output(led_pin, GPIO.HIGH)
-    buzzer_off()   # Stop the alarm
+    buzzer_off()   # silence the alarm
     lcd_show(line1, line2)
-    beep(0.1)      # Short confirmation beep
+    beep(0.1)
     logger.info(f"State -> {name}")
 
 def end_event(reason="ended"):
@@ -378,8 +341,6 @@ def main_loop():
             lcd_show(TEAM_NAME[:16], "Working...")
             last_idle_repaint = now
 
-        # ---- Buttons (each press: short beep, then handle event) ----
-
         # Material button (GPIO5)
         if prev_mat == GPIO.HIGH and b_mat == GPIO.LOW:
             print("[BTN] Material pressed")
@@ -442,25 +403,18 @@ def main_loop():
 # ============================================================================
 
 def main():
-    global buzzer_thread_stop
-    buzzer_t = None
     try:
         print("=" * 50)
         print("MACHINE MAINTENANCE SYSTEM - PROTEUS SIM")
         print("=" * 50)
         GPIO.cleanup()
         setup_gpio()
-
-        # Start buzzer toggle thread
-        buzzer_t = threading.Thread(target=buzzer_worker, daemon=True)
-        buzzer_t.start()
-
         startup_test()
 
         print("LCD: RS=4 E=17 D4=18 D5=27 D6=22 D7=23")
         print("Buttons: GPIO5=Mat  GPIO6=Maint  GPIO12=Break  GPIO7=Cancel")
         print("LEDs:    GPIO26=DT  GPIO20=Maint GPIO16=Break  GPIO19=Mat")
-        print("Sensor:  GPIO21    Buzzer: GPIO13 (manual toggle ~500Hz)")
+        print("Sensor:  GPIO21    Buzzer: GPIO13 (steady HIGH)")
         print("=" * 50)
 
         main_loop()
@@ -471,10 +425,6 @@ def main():
         logger.error(f"Fatal: {e}\n{traceback.format_exc()}")
         print(f"[ERROR] {e}")
     finally:
-        buzzer_thread_stop = True
-        buzzer_off()
-        if buzzer_t is not None:
-            buzzer_t.join(timeout=0.5)
         try:
             lcd_show("Goodbye!", "")
         except Exception:
