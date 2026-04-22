@@ -74,8 +74,9 @@ BUTTON_CANCEL      = 7
 SENSOR_OBSTACLE = 21
 BUZZER_PIN      = 13
 
-# Buzzer PWM settings
-BUZZER_FREQ_HZ  = 2000
+# Buzzer PWM settings - matches Proteus BUZZER model's tuned frequency (500 Hz)
+# Passive piezo buzzers only resonate at their specified frequency
+BUZZER_FREQ_HZ  = 500
 BUZZER_DUTY     = 50
 
 # Downtime threshold (seconds without sensor activity)
@@ -229,9 +230,9 @@ def startup_test():
     print("[TEST] Startup self-test")
     lcd_show("Self Test...", "LEDs + Buzzer")
     all_leds_on()
-    buzz(0.4, freq=2000)
+    buzz(0.4)
     time.sleep(0.2)
-    buzz(0.4, freq=1500)
+    buzz(0.4)
     time.sleep(0.5)
     all_leds_off()
     time.sleep(0.3)
@@ -256,7 +257,7 @@ def trigger_downtime_alert():
     all_leds_on()
     lcd_show("Downtime Alert!", "Choose event")
     for _ in range(3):
-        buzz(0.15, freq=2500)
+        buzz(0.15)
         time.sleep(0.1)
     logger.info("State -> downtime_alert")
 
@@ -338,7 +339,7 @@ def main_loop():
                 lcd_show("Material Change", f"Time: {remaining}s")
                 last_countdown = remaining
                 if remaining <= 10 and remaining > 0:
-                    buzz(0.05, freq=3000)
+                    buzz(0.05)
             if elapsed > MATERIAL_DURATION:
                 logger.info("Material change timed out -> downtime alert")
                 trigger_downtime_alert()
@@ -349,7 +350,7 @@ def main_loop():
 
         # Material button (GPIO5)
         if prev_mat == GPIO.HIGH and b_mat == GPIO.LOW:
-            buzz(0.08, freq=1800)
+            buzz(0.08)
             print("[BTN] Material pressed")
             if state in ("working", "downtime_alert"):
                 if state == "downtime_alert":
@@ -364,7 +365,7 @@ def main_loop():
 
         # Maintenance button (GPIO6)
         if prev_maint == GPIO.HIGH and b_maint == GPIO.LOW:
-            buzz(0.08, freq=1800)
+            buzz(0.08)
             print("[BTN] Maintenance pressed")
             if state in ("working", "downtime_alert"):
                 start_event("maintenance", LED_MAINTENANCE,
@@ -378,7 +379,7 @@ def main_loop():
 
         # Break button (GPIO12)
         if prev_brk == GPIO.HIGH and b_brk == GPIO.LOW:
-            buzz(0.08, freq=1800)
+            buzz(0.08)
             print("[BTN] Break pressed")
             if state in ("working", "downtime_alert"):
                 start_event("break", LED_BREAK,
@@ -392,7 +393,7 @@ def main_loop():
 
         # Cancel button (GPIO7)
         if prev_can == GPIO.HIGH and b_can == GPIO.LOW:
-            buzz(0.2, freq=1200)
+            buzz(0.2)
             print("[BTN] Cancel pressed")
             if state != "working":
                 lcd_show("Event", "Cancelled")
@@ -423,7 +424,7 @@ def main():
         print("Buttons: GPIO5=Mat  GPIO6=Maint  GPIO12=Break  GPIO7=Cancel")
         print("LEDs:    GPIO26=DT  GPIO20=Maint GPIO16=Break  GPIO19=Mat")
         print(f"Sensor:  GPIO21    Buzzer: GPIO13 -> + , GND -> -")
-        print(f"Buzzer:  PWM @ {BUZZER_FREQ_HZ} Hz, ACTIVE HIGH")
+        print(f"Buzzer:  PWM @ {BUZZER_FREQ_HZ} Hz, ACTIVE HIGH (3.3V)")
         print("=" * 50)
 
         main_loop()
