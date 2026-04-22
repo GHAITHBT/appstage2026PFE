@@ -26,7 +26,7 @@ HARDWARE MAPPING:
     GPIO16 -> Break LED         (D4)
     GPIO19 -> Material/Cancel   (D5)
 
-  IR Obstacle Sensor: OUT -> GPIO21 (LOW = obstacle / machine working)
+  IR Obstacle Sensor: OUT -> GPIO21 (HIGH = obstacle detected = machine producing)
 
   Buzzer (active HIGH, steady):
     Buzzer + -> GPIO13
@@ -198,7 +198,7 @@ def setup_gpio():
     for pin in (BUTTON_MATERIAL, BUTTON_MAINTENANCE, BUTTON_BREAK, BUTTON_CANCEL):
         GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-    GPIO.setup(SENSOR_OBSTACLE, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    GPIO.setup(SENSOR_OBSTACLE, GPIO.IN)   # no pull - sensor drives pin actively
 
     GPIO.setup(BUZZER_PIN, GPIO.OUT)
     GPIO.output(BUZZER_PIN, GPIO.LOW)
@@ -318,19 +318,20 @@ def main_loop():
         b_can     = GPIO.input(BUTTON_CANCEL)
 
         # ---- Sensor edge detection ----
-        # IR module: LOW = obstacle detected (machine producing parts)
-        if sensor == GPIO.LOW:
+        # IR module in this schematic: HIGH = obstacle detected (machine producing)
+        # (Toggle the switch attached to GPIO21 to simulate parts passing)
+        if sensor == GPIO.HIGH:
             last_sensor_active = now
-            # On the falling edge (HIGH -> LOW), flash "Sensor: OK" on LCD
-            if prev_sensor == GPIO.HIGH:
-                print(f"[SENSOR] Triggered at t={now:.1f}")
+            # On the rising edge (LOW -> HIGH), flash "Sensor: OK" on LCD
+            if prev_sensor == GPIO.LOW:
+                print(f"[SENSOR] Triggered (HIGH) at t={now:.1f}")
                 if state == "working":
                     sensor_ok_until = now + 1.0   # show msg for 1 second
                     lcd_show(TEAM_NAME[:16], "Sensor: OK")
                     last_idle_lcd = now
-        elif prev_sensor == GPIO.LOW and sensor == GPIO.HIGH:
-            # Rising edge: obstacle gone
-            print(f"[SENSOR] Cleared at t={now:.1f}")
+        elif prev_sensor == GPIO.HIGH and sensor == GPIO.LOW:
+            # Falling edge: obstacle gone
+            print(f"[SENSOR] Cleared (LOW) at t={now:.1f}")
         prev_sensor = sensor
 
         # ---- Downtime detection ----
